@@ -3,6 +3,7 @@ import sys
 import tempfile
 import argparse
 import json
+import base64
 from pathlib import Path
 from typing import Optional, Dict, Any
 
@@ -15,7 +16,6 @@ class BookPipeline:
         client: Mistral,
         model: str = 'mistral-ocr-2512',
         job_dir: Optional[str] = None,
-
     ):
         self.pdf_path = pdf_path
         self.model = model
@@ -54,9 +54,6 @@ class BookPipeline:
     def _upload_file(self):
         pdf_path = Path(self.state["pdf_path"])
         print(f"Step 2: Uploading {pdf_path.name} to Mistral...")
-        if not self.client:
-            raise RuntimeError("Mistral client not initialized")
-
         with open(pdf_path, "rb") as f:
             uploaded_file = self.client.files.upload(
                 file={"file_name": pdf_path.name, "content": f},
@@ -69,16 +66,15 @@ class BookPipeline:
 
     def _request_ocr(self):
         file_id = self.state["file_id"]
-        print(f"Step 3: Sending OCR request for file_id: {file_id}...")
-        if not self.client:
-            raise RuntimeError("Mistral client not initialized")
+        print(f"Step 3: Sending OCR request for file_id: {file_id} (include_image_base64=True)...")
 
         ocr_response = self.client.ocr.process(
             model=self.model,
             document={
                 "type": "file",
                 "file_id": file_id,
-            }
+            },
+            include_image_base64=True
         )
 
         # Extract data for JSON persistence
@@ -95,15 +91,47 @@ class BookPipeline:
         with open(response_path, "w", encoding="utf-8") as f:
             json.dump(raw_data, f, ensure_ascii=False, indent=2)
 
+        self.state["ocr_raw_response"] = raw_data
         self.state["step"] = 4
         self._save_state()
-        print("OCR process completed successfully.")
+        print(f"OCR process completed. Raw JSON saved to {response_path}")
 
+    def _extract_images(self):
+        """Extracts base64 images from the OCR response and saves them to disk."""
+        print("Step 4: Extracting images...")
+        if not self.job_dir:
+            raise RuntimeError("Job directory not initialized")
+
+        raw_response = self.state.get("ocr_raw_response")
+        if not raw_response or "pages" not in raw_response:
+            print("No pages found in response to extract images.")
+            return
+
+        images_dir = self.job_dir / "images"
+        images_dir.mkdir(exist_ok=True)
+
+        count = 0
+        for page in raw_response["pages"]:
+            for img_info in page.get("images", []):
+                img_id = img_info.get("id")
+                base64_data = img_info.get("image_base64")
+
+                if img_id and base64_data:
+                    img_path = images_dir / img_id
+                    # Clean base64 data if it contains a data URI prefix
+                    if "," in base64_data:
+                        base64_data = base64_data.split(",")[1]
+
+                    with open(img_path, "wb") as f:
+                        f.write(base64.b64decode(base64_data))
+                    count += 1
+
+        print(f"Log: Extracted {count} images to {images_dir}")
+        self.state["step"] = 5
+        self._save_state()
 
     def handle(self):
         """Orchestrates the pipeline steps."""
-
-
         # --- Setup Directory and State ---
         if self.job_dir:
             if not self.job_dir.exists():
@@ -127,6 +155,8 @@ class BookPipeline:
             if self.state.get("step") == 3:
                 self._request_ocr()
 
+            if self.state.get("step") == 4:
+                self._extract_images()
 
             print("\nPipeline finished successfully.")
             print(f"Final artifacts are in: {self.job_dir}")
@@ -143,7 +173,6 @@ def main():
     parser.add_argument("--model", type=str, default="mistral-ocr-2512", help="Mistral OCR model name")
     parser.add_argument("--job-dir", type=str, help="Resume from an existing job directory")
     args = parser.parse_args()
-
 
     api_key = os.getenv("MISTRAL_API_KEY")
     if not api_key:
