@@ -1,9 +1,12 @@
+import markdown
+from invoke.tasks import T
 import os
 import sys
 import tempfile
 import argparse
 import json
 import base64
+import re
 from pathlib import Path
 from typing import Optional, Dict, Any
 
@@ -19,29 +22,52 @@ class BookPipeline:
     ):
         self.pdf_path = pdf_path
         self.model = model
-        self.job_dir = Path(job_dir) if job_dir else None
+        self.job_dir: Path = Path(job_dir) if job_dir else Path(tempfile.mkdtemp(prefix="mistral_ocr_"))
         self.state: Dict[str, Any] = {}
         self.client: Mistral = client
+        self._ocr_response: Optional[dict] = None
 
-    def _create_job_dir(self) -> Path:
-        """Creates a persistent temporary directory for the OCR job."""
-        tmp_dir = tempfile.mkdtemp(prefix="mistral_ocr_")
-        return Path(tmp_dir)
+    @property
+    def state_path(self):
+        return self.job_dir / "state.json"
+
+    @property
+    def osr_response_path(self)-> Path:
+        return  self.job_dir / "ocr_response.json"
+
+    @property
+    def osr_response(self)-> dict:
+        if self._ocr_response is None:
+            with open(self.osr_response_path, "r", encoding="utf-8") as f:
+                self._ocr_response = json.load(f)
+        return self._ocr_response
+
+
+    @property
+    def image_path(self)-> Path:
+        res = self.job_dir / "images"
+        res.mkdir(exist_ok=True)
+        return res
+
+    @property
+    def html_path(self)-> Path:
+        return self.job_dir / "content.html"
 
     def _save_state(self):
         """Saves the current pipeline state to a JSON file."""
-        if self.job_dir:
-            state_path = self.job_dir / "state.json"
-            with open(state_path, "w", encoding="utf-8") as f:
-                json.dump(self.state, f, ensure_ascii=False, indent=2)
+        with open(self.state_path, "w", encoding="utf-8") as f:
+            json.dump(self.state, f, ensure_ascii=False, indent=2)
+
 
     def _load_state(self):
         """Loads the pipeline state from a JSON file."""
-        if self.job_dir:
-            state_path = self.job_dir / "state.json"
-            if state_path.exists():
-                with open(state_path, "r", encoding="utf-8") as f:
-                    self.state = json.load(f)
+        if not self.state_path.exists():
+            self.state = {}
+            return
+        else:
+            with open(self.state_path, "r", encoding="utf-8") as f:
+                self.state = json.load(f)
+
 
     def _validate_file(self):
         pdf_path = Path(self.state["pdf_path"])
@@ -74,50 +100,32 @@ class BookPipeline:
                 "type": "file",
                 "file_id": file_id,
             },
-            include_image_base64=True
+            include_image_base64=True,
+            extract_header=True,
+            extract_footer=True,
         )
 
-        # Extract data for JSON persistence
-        if hasattr(ocr_response, "model_dump"):
-            raw_data = ocr_response.model_dump()
-        else:
-            # Fallback for older SDK versions or different object structures
-            raw_data = json.loads(ocr_response.json()) if hasattr(ocr_response, "json") else str(ocr_response)
+        self._ocr_response = ocr_response.model_dump()
 
-        if not self.job_dir:
-             raise RuntimeError("Job directory not initialized")
+        with open(self.osr_response_path, "w", encoding="utf-8") as f:
+            json.dump(ocr_response.model_dump(), f, ensure_ascii=False, indent=2)
 
-        response_path = self.job_dir / "ocr_response.json"
-        with open(response_path, "w", encoding="utf-8") as f:
-            json.dump(raw_data, f, ensure_ascii=False, indent=2)
-
-        self.state["ocr_raw_response"] = raw_data
         self.state["step"] = 4
         self._save_state()
-        print(f"OCR process completed. Raw JSON saved to {response_path}")
+        print(f"OCR process completed. Raw JSON saved to {self.osr_response_path}")
 
     def _extract_images(self):
         """Extracts base64 images from the OCR response and saves them to disk."""
         print("Step 4: Extracting images...")
-        if not self.job_dir:
-            raise RuntimeError("Job directory not initialized")
-
-        raw_response = self.state.get("ocr_raw_response")
-        if not raw_response or "pages" not in raw_response:
-            print("No pages found in response to extract images.")
-            return
-
-        images_dir = self.job_dir / "images"
-        images_dir.mkdir(exist_ok=True)
 
         count = 0
-        for page in raw_response["pages"]:
+        for page in self.osr_response.get("pages", []):
             for img_info in page.get("images", []):
                 img_id = img_info.get("id")
                 base64_data = img_info.get("image_base64")
 
                 if img_id and base64_data:
-                    img_path = images_dir / img_id
+                    img_path = self.image_path / img_id
                     # Clean base64 data if it contains a data URI prefix
                     if "," in base64_data:
                         base64_data = base64_data.split(",")[1]
@@ -126,24 +134,44 @@ class BookPipeline:
                         f.write(base64.b64decode(base64_data))
                     count += 1
 
-        print(f"Log: Extracted {count} images to {images_dir}")
+        print(f"Log: Extracted {count} images to { self.image_path}")
         self.state["step"] = 5
+        self._save_state()
+
+    def _convert_md_to_html(self):
+        md = markdown.Markdown()
+        with open(self.html_path, "w", encoding="utf-8") as html_f:
+            html_f.write("<html><body>\n")
+
+            for page in self.osr_response.get('pages', []):
+                html_f.write(f"<section id='page-{page['index']}'>")
+
+                md_text = page['markdown']
+                html_content = md.convert(md_text)
+                html_f.write(html_content)
+                html_f.write(f"</section>\n")
+
+            html_f.write("</body></html>\n")
+
+        print(f"Converted Markdown to HTML")
+        self.state["step"] = 6
         self._save_state()
 
     def handle(self):
         """Orchestrates the pipeline steps."""
-        # --- Setup Directory and State ---
-        if self.job_dir:
-            if not self.job_dir.exists():
-                print(f"Error: Provided job directory {self.job_dir} does not exist.")
-                sys.exit(1)
-            print(f"Resuming job from: {self.job_dir}")
-            self._load_state()
-        else:
-            self.job_dir = self._create_job_dir()
-            print(f"Created new job directory: {self.job_dir}")
+        # --- Setup Directory and State --
+
+        if not self.job_dir.exists():
+            print(f"Error: Provided job directory {self.job_dir} does not exist.")
+            sys.exit(1)
+
+        self._load_state()
+        if self.state.get('step') is None:
             self.state = {"pdf_path": self.pdf_path, "step": 1}
             self._save_state()
+        else:
+            print(f"Resuming job from: {self.job_dir}")
+
 
         try:
             if self.state.get("step") == 1:
@@ -157,6 +185,9 @@ class BookPipeline:
 
             if self.state.get("step") == 4:
                 self._extract_images()
+
+            if self.state.get("step") == 5:
+                self._convert_md_to_html()
 
             print("\nPipeline finished successfully.")
             print(f"Final artifacts are in: {self.job_dir}")
