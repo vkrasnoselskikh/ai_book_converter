@@ -1,0 +1,110 @@
+from __future__ import annotations
+
+import json
+import logging
+from pathlib import Path
+
+from ai_book_converter.config import DEFAULT_OCR_MODEL, SUPPORTED_EXTENSIONS, default_output_path
+from ai_book_converter.errors import InputValidationError
+from ai_book_converter.job import cleanup_job_dir, copy_source_document, create_job_paths, load_state, save_state
+from ai_book_converter.models import PageContent, PipelineState, PipelineStep
+from ai_book_converter.ocr import OcrClient
+from ai_book_converter.processing import build_endnotes, extract_images, normalize_ocr_response, save_normalized_pages
+from ai_book_converter.renderer import publish_output, render_book_html, render_book_xhtml, render_body_sections, render_endnotes_html, write_book_artifacts
+
+
+logger = logging.getLogger(__name__)
+
+
+# Requirements: book-converter.1, book-converter.2, book-converter.3, book-converter.4, book-converter.5, book-converter.6, book-converter.7
+class BookPipeline:
+    # Requirements: book-converter.1, book-converter.2, book-converter.3, book-converter.7
+    def __init__(
+        self,
+        source_path: Path,
+        ocr_client: OcrClient,
+        model: str = DEFAULT_OCR_MODEL,
+        job_dir: Path | None = None,
+        output_path: Path | None = None,
+        keep_temp: bool = False,
+    ) -> None:
+        self.source_path = source_path.expanduser().resolve()
+        self.output_path = default_output_path(self.source_path, output_path)
+        self.model = model
+        self.keep_temp = keep_temp
+        self.ocr_client = ocr_client
+        self.job_paths, self.auto_created_job_dir = create_job_paths(job_dir)
+        self.state = load_state(self.job_paths) or PipelineState(
+            source_path=str(self.source_path),
+            output_path=str(self.output_path),
+            model=self.model,
+            step=PipelineStep.VALIDATED,
+            auto_created_job_dir=self.auto_created_job_dir,
+            keep_temp=keep_temp,
+        )
+
+    # Requirements: book-converter.1, book-converter.2, book-converter.3, book-converter.4, book-converter.5, book-converter.6, book-converter.7
+    def handle(self) -> Path:
+        self._validate_input()
+        copied_source = copy_source_document(self.job_paths, self.source_path)
+        ocr_response = self._ensure_ocr_response(copied_source)
+        normalized_pages = self._ensure_normalized_pages(ocr_response)
+        output_path = self._render_and_publish(normalized_pages)
+        cleanup_job_dir(
+            self.job_paths,
+            output_path=output_path,
+            keep_temp=self.keep_temp,
+            auto_created=self.auto_created_job_dir,
+        )
+        return output_path
+
+    # Requirements: book-converter.1
+    def _validate_input(self) -> None:
+        if not self.source_path.exists():
+            raise InputValidationError(f"Input file does not exist: {self.source_path}")
+        if self.source_path.suffix.lower() not in SUPPORTED_EXTENSIONS:
+            raise InputValidationError(
+                f"Unsupported input format: {self.source_path.suffix}. Supported formats: PDF, DJVU."
+            )
+        self.state.step = PipelineStep.VALIDATED
+        save_state(self.job_paths, self.state)
+
+    # Requirements: book-converter.2, book-converter.3
+    def _ensure_ocr_response(self, copied_source: Path) -> dict[str, object]:
+        if self.job_paths.ocr_response_path.exists():
+            return json.loads(self.job_paths.ocr_response_path.read_text(encoding="utf-8"))
+        ocr_response = self.ocr_client.process_document(copied_source, self.model)
+        self.job_paths.ocr_response_path.write_text(
+            json.dumps(ocr_response, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        self.state.step = PipelineStep.OCR_REQUESTED
+        save_state(self.job_paths, self.state)
+        return dict(ocr_response)
+
+    # Requirements: book-converter.2, book-converter.4, book-converter.5, book-converter.6
+    def _ensure_normalized_pages(self, ocr_response: dict[str, object]) -> list[PageContent]:
+        saved_images = extract_images(ocr_response, self.job_paths.images_dir)
+        self.state.step = PipelineStep.IMAGES_EXTRACTED
+        save_state(self.job_paths, self.state)
+        normalized_pages = normalize_ocr_response(ocr_response, saved_images)
+        save_normalized_pages(normalized_pages, self.job_paths.normalized_pages_path)
+        self.state.step = PipelineStep.NORMALIZED
+        save_state(self.job_paths, self.state)
+        return normalized_pages
+
+    # Requirements: book-converter.4, book-converter.5, book-converter.6, book-converter.7
+    def _render_and_publish(self, normalized_pages: list[PageContent]) -> Path:
+        pages_with_notes, endnotes = build_endnotes(normalized_pages)
+        body_html = render_body_sections(pages_with_notes, image_href_prefix="../images")
+        epub_body_html = render_body_sections(pages_with_notes, image_href_prefix="images")
+        endnotes_html = render_endnotes_html(endnotes)
+        content_html = render_book_html(body_html, endnotes_html)
+        content_xhtml = render_book_xhtml(self.source_path.stem, epub_body_html, endnotes_html)
+        write_book_artifacts(self.job_paths, body_html, endnotes_html, content_html, content_xhtml)
+        self.state.step = PipelineStep.HTML_RENDERED
+        save_state(self.job_paths, self.state)
+        output_path = publish_output(self.job_paths, self.output_path, title=self.source_path.stem)
+        self.state.step = PipelineStep.OUTPUT_WRITTEN
+        save_state(self.job_paths, self.state)
+        return output_path
