@@ -1,12 +1,12 @@
 import markdown
-from invoke.tasks import T
+import re
 import os
 import sys
 import tempfile
 import argparse
 import json
 import base64
-import re
+
 from pathlib import Path
 from typing import Optional, Dict, Any
 
@@ -17,7 +17,7 @@ class BookPipeline:
     def __init__(self,
         pdf_path: str,
         client: Mistral,
-        model: str = 'mistral-ocr-2512',
+        model: str = 'mistral-ocr-latest',
         job_dir: Optional[str] = None,
     ):
         self.pdf_path = pdf_path
@@ -100,6 +100,7 @@ class BookPipeline:
                 "type": "file",
                 "file_id": file_id,
             },
+            table_format='html',
             include_image_base64=True,
             extract_header=True,
             extract_footer=True,
@@ -139,14 +140,25 @@ class BookPipeline:
         self._save_state()
 
     def _convert_md_to_html(self):
-        md = markdown.Markdown()
+        # Collect image metadata for all images
+        image_metadata = {}
+        md = markdown.Markdown(extensions=['extra', 'attr_list'])
         with open(self.html_path, "w", encoding="utf-8") as html_f:
             html_f.write("<html><body>\n")
-
             for page in self.osr_response.get('pages', []):
                 html_f.write(f"<section id='page-{page['index']}'>")
 
                 md_text = page['markdown']
+
+                for img in page['images']:
+                    width = img['bottom_right_x']-img["top_left_x"]
+                    height = img['bottom_right_y']-img["top_left_y"]
+
+                    md_text = md_text.replace(
+                        f"![{img['id']}]({img['id']})",
+                        f"""<img src="images/{img['id']}" alt="{img['id']}" height="{height}" width="{width}" />"""
+                    )
+
                 html_content = md.convert(md_text)
                 html_f.write(html_content)
                 html_f.write(f"</section>\n")
