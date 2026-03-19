@@ -3,7 +3,7 @@ import pytest
 from mistralai import Mistral
 from pdf_ocr import BookPipeline
 
-file = "/Users/user/Library/CloudStorage/GoogleDrive-v.krasnoselskikh.im@gmail.com/My Drive/Книги/Паттерны разработки на Python - TDD, DDD и событийно-ориентированная архитектура (Гарри Персиваль, Боб Грегори).pdf"
+file = "assets/Паттерны разработки на Python - TDD, DDD и событийно-ориентированная архитектура (Гарри Персиваль, Боб Грегори).pdf"
 job_dir = None
 #job_dir = '/var/folders/8b/kq_29d4n26qbfhjjc0np7l8m0000gn/T/mistral_ocr_gpigugmh'
 
