@@ -46,6 +46,37 @@ class PageImage:
 
 # Requirements: book-converter.4, book-converter.5, book-converter.6
 @dataclass(frozen=True)
+class TocEntry:
+    title: str
+    page_index: int
+    level: int = 1
+
+
+# Requirements: book-converter.4, book-converter.5, book-converter.6
+@dataclass(frozen=True)
+class BookMetadata:
+    title: str
+    authors: list[str] = field(default_factory=list)
+    language: str = "en"
+    toc_entries: list[TocEntry] = field(default_factory=list)
+    cover_subtitle: str | None = None
+
+    # Requirements: book-converter.2, book-converter.7
+    def to_json(self) -> JsonObject:
+        return {
+            "title": self.title,
+            "authors": list(self.authors),
+            "language": self.language,
+            "toc_entries": [
+                {"title": entry.title, "page_index": entry.page_index, "level": entry.level}
+                for entry in self.toc_entries
+            ],
+            "cover_subtitle": self.cover_subtitle,
+        }
+
+
+# Requirements: book-converter.4, book-converter.5, book-converter.6
+@dataclass(frozen=True)
 class PageTable:
     table_id: str
     content_html: str

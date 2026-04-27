@@ -4,13 +4,14 @@ import zipfile
 from pathlib import Path
 
 from ai_book_converter.job import create_job_paths
-from ai_book_converter.models import PageContent, PageTable
+from ai_book_converter.models import BookMetadata, PageContent, PageTable, TocEntry
 from ai_book_converter.processing import build_endnotes, extract_images, normalize_ocr_response
 from ai_book_converter.renderer import (
     publish_output,
     render_book_html,
     render_book_xhtml,
     render_body_sections,
+    render_cover_xhtml,
     render_endnotes_html,
     write_book_artifacts,
 )
@@ -64,8 +65,27 @@ def test_should_build_epub_archive_with_required_files(tmp_path: Path) -> None:
     endnotes_html = render_endnotes_html(endnotes)
     content_html = render_book_html(html_body, endnotes_html)
     content_xhtml = render_book_xhtml("sample", epub_body, endnotes_html)
-    write_book_artifacts(job_paths, html_body, endnotes_html, content_html, content_xhtml)
-    output_path = publish_output(job_paths, tmp_path / "sample.epub", title="sample")
+    cover_xhtml = render_cover_xhtml(
+        BookMetadata(
+            title="sample",
+            authors=["Test Author"],
+            language="ru",
+            toc_entries=[TocEntry(title="Chapter 1", page_index=0)],
+            cover_subtitle="Subtitle",
+        )
+    )
+    write_book_artifacts(job_paths, html_body, endnotes_html, content_html, content_xhtml, cover_xhtml)
+    output_path = publish_output(
+        job_paths,
+        tmp_path / "sample.epub",
+        metadata=BookMetadata(
+            title="sample",
+            authors=["Test Author"],
+            language="ru",
+            toc_entries=[TocEntry(title="Chapter 1", page_index=0)],
+            cover_subtitle="Subtitle",
+        ),
+    )
     assert output_path.exists()
     with zipfile.ZipFile(output_path) as epub_archive:
         assert epub_archive.namelist()[0] == "mimetype"
@@ -74,6 +94,22 @@ def test_should_build_epub_archive_with_required_files(tmp_path: Path) -> None:
         assert "OEBPS/content.opf" in epub_archive.namelist()
         assert "OEBPS/toc.ncx" in epub_archive.namelist()
         assert "OEBPS/content.xhtml" in epub_archive.namelist()
+        assert "OEBPS/cover.xhtml" in epub_archive.namelist()
+        cover_xhtml_text = epub_archive.read("OEBPS/cover.xhtml").decode("utf-8")
+        assert "cover-title" in cover_xhtml_text
+        assert "sample" in cover_xhtml_text
+        assert "Test Author" in cover_xhtml_text
+        assert "Subtitle" in cover_xhtml_text
+        content_opf_text = epub_archive.read("OEBPS/content.opf").decode("utf-8")
+        assert "<dc:title>sample</dc:title>" in content_opf_text
+        assert "<dc:creator>Test Author</dc:creator>" in content_opf_text
+        assert "<dc:language>ru</dc:language>" in content_opf_text
+        assert 'id="cover" href="cover.xhtml"' in content_opf_text
+        assert 'reference href="cover.xhtml" title="Cover" type="cover"' in content_opf_text
+        assert '<itemref idref="cover" linear="yes" />' in content_opf_text
+        toc_ncx_text = epub_archive.read("OEBPS/toc.ncx").decode("utf-8")
+        assert "Chapter 1" in toc_ncx_text
+        assert 'content.xhtml#page-0' in toc_ncx_text
         content_xhtml_text = epub_archive.read("OEBPS/content.xhtml").decode("utf-8")
         assert "<section" in content_xhtml_text
         assert "<h1>" in content_xhtml_text

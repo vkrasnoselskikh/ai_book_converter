@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from ai_book_converter.errors import OcrProcessingError
-from ai_book_converter.ocr import merge_hybrid_ocr_payloads, parse_llm_ocr_payload
+from ai_book_converter.ocr import extract_book_metadata, merge_hybrid_ocr_payloads, parse_llm_front_matter_payload
 
 
 # Requirements: book-converter.3
@@ -99,14 +99,44 @@ def test_should_parse_json_code_fences_from_llm_response() -> None:
     Action: Parse the LLM OCR payload.
     Assertions: The payload is loaded as a JSON object with a pages list.
     Requirements: book-converter.3"""
-    payload = parse_llm_ocr_payload(
+    payload = parse_llm_front_matter_payload(
         """```json
-{"pages":[{"index":0,"markdown":"hello","headers":[],"footers":[],"images":[]}]}
+{"title":"Book","authors":["Author"],"language":"ru","toc":[{"title":"Intro","page_index":0}],"pages":[{"index":0,"markdown":"hello","headers":[],"footers":[],"images":[]}]}
 ```"""
     )
 
-    assert list(payload) == ["pages"]
+    assert payload["title"] == "Book"
+    assert payload["authors"] == ["Author"]
     assert payload["pages"] == [{"index": 0, "markdown": "hello", "headers": [], "footers": [], "images": []}]
+
+
+# Requirements: book-converter.3
+def test_should_extract_book_metadata_from_front_matter_payload() -> None:
+    """Preconditions: Front matter payload contains title, authors, language, and TOC entries.
+    Action: Extract book metadata from the payload.
+    Assertions: Book metadata contains parsed metadata fields and TOC entries.
+    Requirements: book-converter.3"""
+    metadata = extract_book_metadata(
+        {
+            "title": "Breathing Practices",
+            "authors": ["Jane Doe"],
+            "language": "ru",
+            "cover_subtitle": "Lecture notes",
+            "toc": [
+                {"title": "Introduction", "page_index": 0, "level": 1},
+                {"title": "Exercises", "page_index": 5, "level": 2},
+            ],
+            "pages": [],
+        },
+        fallback_title="Fallback",
+    )
+
+    assert metadata.title == "Breathing Practices"
+    assert metadata.authors == ["Jane Doe"]
+    assert metadata.language == "ru"
+    assert metadata.cover_subtitle == "Lecture notes"
+    assert [entry.title for entry in metadata.toc_entries] == ["Introduction", "Exercises"]
+    assert [entry.page_index for entry in metadata.toc_entries] == [0, 5]
 
 
 # Requirements: book-converter.3
@@ -116,4 +146,4 @@ def test_should_raise_clear_error_for_invalid_llm_json_payload() -> None:
     Assertions: The parser raises an OCR processing error with a clear JSON validation message.
     Requirements: book-converter.3"""
     with pytest.raises(OcrProcessingError, match="LLM OCR payload is not valid JSON"):
-        parse_llm_ocr_payload('{"pages": [{"index": 0, "markdown": "unterminated}]')
+        parse_llm_front_matter_payload('{"pages": [{"index": 0, "markdown": "unterminated}]')

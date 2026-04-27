@@ -10,7 +10,7 @@ import markdown
 
 from ai_book_converter.errors import OutputPackagingError
 from ai_book_converter.job import JobPaths
-from ai_book_converter.models import Endnote, PageContent, PageImage, PageTable
+from ai_book_converter.models import BookMetadata, Endnote, PageContent, PageImage, PageTable, TocEntry
 
 
 logger = logging.getLogger(__name__)
@@ -74,6 +74,38 @@ def render_book_xhtml(title: str, body_html: str, endnotes_html: str) -> str:
     )
 
 
+# Requirements: book-converter.4, book-converter.5, book-converter.6, book-converter.7
+def render_cover_xhtml(metadata: BookMetadata) -> str:
+    subtitle_html = (
+        f'<p class="cover-subtitle">{escape(metadata.cover_subtitle)}</p>'
+        if metadata.cover_subtitle
+        else ""
+    )
+    authors_html = ""
+    if metadata.authors:
+        authors_html = "\n".join(
+            f'<p class="cover-author">{escape(author)}</p>' for author in metadata.authors
+        )
+    return "\n".join(
+        [
+            '<?xml version="1.0" encoding="utf-8"?>',
+            '<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en">',
+            "<head>",
+            f"<title>{escape(metadata.title)}</title>",
+            '<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />',
+            "</head>",
+            '<body class="cover-page">',
+            '<section id="cover">',
+            f'<h1 class="cover-title">{escape(metadata.title)}</h1>',
+            subtitle_html,
+            authors_html,
+            "</section>",
+            "</body>",
+            "</html>",
+        ]
+    )
+
+
 # Requirements: book-converter.2, book-converter.4, book-converter.5, book-converter.7
 def write_book_artifacts(
     job_paths: JobPaths,
@@ -81,20 +113,22 @@ def write_book_artifacts(
     endnotes_html: str,
     content_html: str,
     content_xhtml: str,
+    cover_xhtml: str,
 ) -> None:
     job_paths.body_markdown_path.write_text(body_html, encoding="utf-8")
     job_paths.endnotes_markdown_path.write_text(endnotes_html, encoding="utf-8")
     job_paths.content_html_path.write_text(content_html, encoding="utf-8")
     job_paths.content_xhtml_path.write_text(content_xhtml, encoding="utf-8")
+    job_paths.cover_xhtml_path.write_text(cover_xhtml, encoding="utf-8")
 
 
 # Requirements: book-converter.7
-def publish_output(job_paths: JobPaths, output_path: Path, title: str) -> Path:
+def publish_output(job_paths: JobPaths, output_path: Path, metadata: BookMetadata) -> Path:
     suffix = output_path.suffix.lower()
     if suffix in {"", ".html"}:
         return _publish_html_output(job_paths, output_path)
     if suffix == ".epub":
-        return _publish_epub_output(job_paths, output_path, title)
+        return _publish_epub_output(job_paths, output_path, metadata)
     raise OutputPackagingError(f"Unsupported output format: {output_path.suffix}")
 
 
@@ -112,9 +146,9 @@ def _publish_html_output(job_paths: JobPaths, output_path: Path) -> Path:
 
 
 # Requirements: book-converter.7
-def _publish_epub_output(job_paths: JobPaths, output_path: Path, title: str) -> Path:
+def _publish_epub_output(job_paths: JobPaths, output_path: Path, metadata: BookMetadata) -> Path:
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    _write_epub_support_files(job_paths, title)
+    _write_epub_support_files(job_paths, metadata)
     _sync_epub_images(job_paths)
     with zipfile.ZipFile(output_path, "w") as epub_archive:
         epub_archive.write(job_paths.mimetype_path, "mimetype", compress_type=zipfile.ZIP_STORED)
@@ -123,6 +157,7 @@ def _publish_epub_output(job_paths: JobPaths, output_path: Path, title: str) -> 
             job_paths.package_opf_path,
             job_paths.toc_ncx_path,
             job_paths.content_xhtml_path,
+            job_paths.cover_xhtml_path,
         ):
             epub_archive.write(root_path, root_path.relative_to(job_paths.epub_dir))
         for image_path in sorted(job_paths.epub_images_dir.iterdir()):
@@ -142,16 +177,17 @@ def _sync_epub_images(job_paths: JobPaths) -> None:
 
 
 # Requirements: book-converter.7
-def _write_epub_support_files(job_paths: JobPaths, title: str) -> None:
+def _write_epub_support_files(job_paths: JobPaths, metadata: BookMetadata) -> None:
     job_paths.mimetype_path.write_text("application/epub+zip", encoding="utf-8")
     job_paths.container_xml_path.write_text(_render_container_xml(), encoding="utf-8")
+    job_paths.cover_xhtml_path.write_text(render_cover_xhtml(metadata), encoding="utf-8")
     manifest_items = _render_image_manifest(job_paths)
-    spine_items = '<itemref idref="content" />'
+    spine_items = '\n'.join(['<itemref idref="cover" linear="yes" />', '<itemref idref="content" />'])
     job_paths.package_opf_path.write_text(
-        _render_content_opf(title=title, manifest_items=manifest_items, spine_items=spine_items),
+        _render_content_opf(metadata=metadata, manifest_items=manifest_items, spine_items=spine_items),
         encoding="utf-8",
     )
-    job_paths.toc_ncx_path.write_text(_render_toc_ncx(title=title), encoding="utf-8")
+    job_paths.toc_ncx_path.write_text(_render_toc_ncx(metadata), encoding="utf-8")
 
 
 # Requirements: book-converter.7
@@ -169,34 +205,42 @@ def _render_container_xml() -> str:
 
 
 # Requirements: book-converter.7
-def _render_content_opf(title: str, manifest_items: str, spine_items: str) -> str:
-    return "\n".join(
-        [
-            '<?xml version="1.0" encoding="UTF-8"?>',
-            '<package xmlns="http://www.idpf.org/2007/opf" unique-identifier="bookid" version="2.0">',
-            '  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">',
-            "    <dc:identifier id=\"bookid\">ai-book-converter</dc:identifier>",
-            f"    <dc:title>{escape(title)}</dc:title>",
-            "    <dc:language>en</dc:language>",
-            "  </metadata>",
-            "  <manifest>",
-            '    <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml" />',
-            '    <item id="content" href="content.xhtml" media-type="application/xhtml+xml" />',
-            manifest_items,
-            "  </manifest>",
-            '  <spine toc="ncx">',
-            f"    {spine_items}",
-            "  </spine>",
-            "  <guide>",
-            '    <reference href="content.xhtml" title="Start" type="text" />',
-            "  </guide>",
-            "</package>",
-        ]
-    )
+def _render_content_opf(metadata: BookMetadata, manifest_items: str, spine_items: str) -> str:
+    author_lines = [
+        f"    <dc:creator>{escape(author)}</dc:creator>"
+        for author in metadata.authors
+    ]
+    metadata_lines = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<package xmlns="http://www.idpf.org/2007/opf" unique-identifier="bookid" version="2.0">',
+        '  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">',
+        "    <dc:identifier id=\"bookid\">ai-book-converter</dc:identifier>",
+        f"    <dc:title>{escape(metadata.title)}</dc:title>",
+        f"    <dc:language>{escape(metadata.language)}</dc:language>",
+        *author_lines,
+        "  </metadata>",
+        "  <manifest>",
+        '    <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml" />',
+        '    <item id="cover" href="cover.xhtml" media-type="application/xhtml+xml" />',
+        '    <item id="content" href="content.xhtml" media-type="application/xhtml+xml" />',
+        manifest_items,
+        "  </manifest>",
+        '  <spine toc="ncx">',
+        f"    {spine_items}",
+        "  </spine>",
+        "  <guide>",
+        '    <reference href="cover.xhtml" title="Cover" type="cover" />',
+        '    <reference href="content.xhtml" title="Start" type="text" />',
+        "  </guide>",
+        "</package>",
+    ]
+    return "\n".join(metadata_lines)
 
 
 # Requirements: book-converter.7
-def _render_toc_ncx(title: str) -> str:
+def _render_toc_ncx(metadata: BookMetadata) -> str:
+    toc_entries = metadata.toc_entries
+    nav_points = _render_nav_points(metadata.title, toc_entries)
     return "\n".join(
         [
             '<?xml version="1.0" encoding="UTF-8"?>',
@@ -207,16 +251,38 @@ def _render_toc_ncx(title: str) -> str:
             '    <meta content="0" name="dtb:totalPageCount" />',
             '    <meta content="0" name="dtb:maxPageNumber" />',
             "  </head>",
-            f"  <docTitle><text>{escape(title)}</text></docTitle>",
+            f"  <docTitle><text>{escape(metadata.title)}</text></docTitle>",
             "  <navMap>",
-            '    <navPoint id="navpoint-1" playOrder="1">',
-            f"      <navLabel><text>{escape(title)}</text></navLabel>",
-            '      <content src="content.xhtml" />',
-            "    </navPoint>",
+            nav_points,
             "  </navMap>",
             "</ncx>",
         ]
     )
+
+
+# Requirements: book-converter.7
+def _render_nav_points(book_title: str, toc_entries: list[TocEntry]) -> str:
+    if not toc_entries:
+        return "\n".join(
+            [
+                '    <navPoint id="navpoint-1" playOrder="1">',
+                f"      <navLabel><text>{escape(book_title)}</text></navLabel>",
+                '      <content src="content.xhtml" />',
+                "    </navPoint>",
+            ]
+        )
+    lines: list[str] = []
+    for play_order, toc_entry in enumerate(toc_entries, start=1):
+        anchor = f"page-{max(0, toc_entry.page_index)}"
+        lines.extend(
+            [
+                f'    <navPoint id="navpoint-{play_order}" playOrder="{play_order}">',
+                f"      <navLabel><text>{escape(toc_entry.title)}</text></navLabel>",
+                f'      <content src="content.xhtml#{anchor}" />',
+                "    </navPoint>",
+            ]
+        )
+    return "\n".join(lines)
 
 
 # Requirements: book-converter.6, book-converter.7

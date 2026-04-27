@@ -7,10 +7,18 @@ from pathlib import Path
 from ai_book_converter.config import DEFAULT_OCR_MODEL, SUPPORTED_EXTENSIONS, default_output_path
 from ai_book_converter.errors import InputValidationError
 from ai_book_converter.job import cleanup_job_dir, copy_source_document, create_job_paths, load_state, save_state
-from ai_book_converter.models import PageContent, PipelineState, PipelineStep
+from ai_book_converter.models import BookMetadata, PageContent, PipelineState, PipelineStep
 from ai_book_converter.ocr import OcrClient
 from ai_book_converter.processing import build_endnotes, extract_images, normalize_ocr_response, save_normalized_pages
-from ai_book_converter.renderer import publish_output, render_book_html, render_book_xhtml, render_body_sections, render_endnotes_html, write_book_artifacts
+from ai_book_converter.renderer import (
+    publish_output,
+    render_book_html,
+    render_book_xhtml,
+    render_body_sections,
+    render_cover_xhtml,
+    render_endnotes_html,
+    write_book_artifacts,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -73,6 +81,14 @@ class BookPipeline:
             len(_object_list(ocr_response.get("pages"))),
             self.job_paths.ocr_response_path,
         )
+        logger.info("Starting front matter metadata stage")
+        book_metadata = self._extract_book_metadata(copied_source, ocr_response)
+        logger.info(
+            "Completed front matter metadata stage: title=%s authors=%s toc_entries=%s",
+            book_metadata.title,
+            len(book_metadata.authors),
+            len(book_metadata.toc_entries),
+        )
         logger.info("Starting normalization stage")
         normalized_pages = self._ensure_normalized_pages(ocr_response)
         logger.info(
@@ -81,7 +97,7 @@ class BookPipeline:
             self.job_paths.normalized_pages_path,
         )
         logger.info("Starting render and publish stage")
-        output_path = self._render_and_publish(normalized_pages)
+        output_path = self._render_and_publish(normalized_pages, book_metadata)
         logger.info("Completed render and publish stage: output_path=%s", output_path)
         logger.info("Starting cleanup stage")
         cleanup_job_dir(
@@ -128,6 +144,12 @@ class BookPipeline:
         )
         return dict(ocr_response)
 
+    # Requirements: book-converter.2, book-converter.3, book-converter.7
+    def _extract_book_metadata(self, copied_source: Path, ocr_response: dict[str, object]) -> BookMetadata:
+        del ocr_response
+        logger.info("Requesting front matter metadata: source=%s", copied_source)
+        return self.ocr_client.extract_book_metadata(copied_source)
+
     # Requirements: book-converter.2, book-converter.4, book-converter.5, book-converter.6
     def _ensure_normalized_pages(self, ocr_response: dict[str, object]) -> list[PageContent]:
         logger.info("Extracting images: images_dir=%s", self.job_paths.images_dir)
@@ -154,7 +176,7 @@ class BookPipeline:
         return normalized_pages
 
     # Requirements: book-converter.4, book-converter.5, book-converter.6, book-converter.7
-    def _render_and_publish(self, normalized_pages: list[PageContent]) -> Path:
+    def _render_and_publish(self, normalized_pages: list[PageContent], book_metadata: BookMetadata) -> Path:
         logger.info("Building endnotes for normalized pages")
         pages_with_notes, endnotes = build_endnotes(normalized_pages)
         logger.info(
@@ -167,8 +189,9 @@ class BookPipeline:
         epub_body_html = render_body_sections(pages_with_notes, image_href_prefix="images")
         endnotes_html = render_endnotes_html(endnotes)
         content_html = render_book_html(body_html, endnotes_html)
-        content_xhtml = render_book_xhtml(self.source_path.stem, epub_body_html, endnotes_html)
-        write_book_artifacts(self.job_paths, body_html, endnotes_html, content_html, content_xhtml)
+        content_xhtml = render_book_xhtml(book_metadata.title, epub_body_html, endnotes_html)
+        cover_xhtml = render_cover_xhtml(book_metadata)
+        write_book_artifacts(self.job_paths, body_html, endnotes_html, content_html, content_xhtml, cover_xhtml)
         self.state.step = PipelineStep.HTML_RENDERED
         save_state(self.job_paths, self.state)
         logger.info(
@@ -179,7 +202,7 @@ class BookPipeline:
             self.job_paths.content_html_path,
         )
         logger.info("Publishing final output: target=%s", self.output_path)
-        output_path = publish_output(self.job_paths, self.output_path, title=self.source_path.stem)
+        output_path = publish_output(self.job_paths, self.output_path, metadata=book_metadata)
         self.state.step = PipelineStep.OUTPUT_WRITTEN
         save_state(self.job_paths, self.state)
         logger.info(

@@ -36,8 +36,16 @@ def test_should_process_fixture_and_write_epub_output(tmp_path: Path) -> None:
     assert (job_dir / "book" / "epub" / "OEBPS" / "content.opf").exists()
     assert (job_dir / "book" / "epub" / "OEBPS" / "toc.ncx").exists()
     assert (job_dir / "book" / "epub" / "OEBPS" / "content.xhtml").exists()
+    assert (job_dir / "book" / "epub" / "OEBPS" / "cover.xhtml").exists()
     with zipfile.ZipFile(output_path) as epub_archive:
         assert epub_archive.read("mimetype") == b"application/epub+zip"
+        content_opf = epub_archive.read("OEBPS/content.opf").decode("utf-8")
+        assert "<dc:title>sample_ocr_response</dc:title>" in content_opf
+        assert 'id="cover" href="cover.xhtml"' in content_opf
+        toc_ncx = epub_archive.read("OEBPS/toc.ncx").decode("utf-8")
+        assert "sample_ocr_response" in toc_ncx
+        cover_xhtml = epub_archive.read("OEBPS/cover.xhtml").decode("utf-8")
+        assert "sample_ocr_response" in cover_xhtml
         content_xhtml = epub_archive.read("OEBPS/content.xhtml").decode("utf-8")
         assert "<h1>Паттерны разработки на Python</h1>" in content_xhtml
         assert "<h2>Endnotes</h2>" in content_xhtml

@@ -35,6 +35,7 @@ class JobPaths:
     endnotes_markdown_path: Path
     content_html_path: Path
     content_xhtml_path: Path
+    cover_xhtml_path: Path
     package_opf_path: Path
     toc_ncx_path: Path
     container_xml_path: Path
@@ -96,6 +97,7 @@ def create_job_paths(job_dir: Path | None) -> tuple[JobPaths, bool]:
             endnotes_markdown_path=book_dir / "endnotes.md",
             content_html_path=book_dir / "content.html",
             content_xhtml_path=epub_oebps_dir / "content.xhtml",
+            cover_xhtml_path=epub_oebps_dir / "cover.xhtml",
             package_opf_path=epub_oebps_dir / "content.opf",
             toc_ncx_path=epub_oebps_dir / "toc.ncx",
             container_xml_path=epub_meta_inf_dir / "container.xml",

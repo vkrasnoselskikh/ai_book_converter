@@ -13,6 +13,7 @@ from pypdf import PdfReader, PdfWriter
 from ai_book_converter.config import DEFAULT_LLM_MODEL, FRONT_MATTER_PAGE_COUNT, HYBRID_LLM_PAGE_COUNT
 from ai_book_converter.errors import OcrProcessingError
 from ai_book_converter.json_types import JsonObject, JsonValue
+from ai_book_converter.models import BookMetadata, TocEntry
 
 if TYPE_CHECKING:
     from mistralai import Mistral
@@ -24,6 +25,9 @@ logger = logging.getLogger(__name__)
 # Requirements: book-converter.3, book-converter.8
 class OcrClient(Protocol):
     def process_document(self, source_path: Path, model: str) -> JsonObject:
+        ...
+
+    def extract_book_metadata(self, source_path: Path) -> BookMetadata:
         ...
 
 
@@ -66,6 +70,18 @@ class HybridMistralOcrClient:
                     "Completed OCR request: pages=%s",
                     len(_object_list(ocr_response.get("pages"))),
                 )
+        except Exception as error:  # pragma: no cover - thin wrapper over external SDK
+            raise OcrProcessingError(str(error)) from error
+        logger.info("Completed OCR-only processing: pages=%s", len(_object_list(ocr_response.get("pages"))))
+        return ocr_response
+
+    # Requirements: book-converter.3
+    def extract_book_metadata(self, source_path: Path) -> BookMetadata:
+        front_matter_document: Path | None = None
+        try:
+            from mistralai import Mistral
+
+            with Mistral(api_key=self._api_key) as client:
                 front_matter_document = prepare_front_matter_document(source_path, FRONT_MATTER_PAGE_COUNT)
                 logger.info("Starting front matter LLM request: source=%s", front_matter_document)
                 uploaded_front_matter = self._upload_document(client, front_matter_document)
@@ -80,22 +96,23 @@ class HybridMistralOcrClient:
                     source_name=front_matter_document.name,
                 )
                 logger.info(
-                    "Completed front matter LLM request: pages=%s",
+                    "Completed front matter LLM request: pages=%s toc_entries=%s",
                     len(_object_list(llm_response.get("pages"))),
+                    len(_object_list(llm_response.get("toc"))),
                 )
         except Exception as error:  # pragma: no cover - thin wrapper over external SDK
             raise OcrProcessingError(str(error)) from error
         finally:
             if front_matter_document is not None and front_matter_document != source_path and front_matter_document.exists():
                 front_matter_document.unlink(missing_ok=True)
-        logger.info("Starting hybrid OCR payload merge")
-        merged_payload = merge_hybrid_ocr_payloads(
-            ocr_response=ocr_response,
-            llm_response=llm_response,
-            llm_page_count=self._llm_page_count,
+        metadata = extract_book_metadata(llm_response, fallback_title=source_path.stem)
+        logger.info(
+            "Extracted book metadata: title=%s authors=%s toc_entries=%s",
+            metadata.title,
+            len(metadata.authors),
+            len(metadata.toc_entries),
         )
-        logger.info("Completed hybrid OCR payload merge: pages=%s", len(_object_list(merged_payload.get("pages"))))
-        return merged_payload
+        return metadata
 
     # Requirements: book-converter.3
     def _upload_document(self, client: Mistral, source_path: Path) -> UploadedDocument:
@@ -155,7 +172,7 @@ class HybridMistralOcrClient:
         if not response.choices:
             raise OcrProcessingError("LLM response did not contain any choices.")
         content = extract_assistant_text(response.choices[0].message.content)
-        return parse_llm_ocr_payload(content)
+        return parse_llm_front_matter_payload(content)
 
 
 # Requirements: book-converter.3, book-converter.8
@@ -172,12 +189,23 @@ class FixtureOcrClient:
             raise OcrProcessingError(f"OCR fixture must be a JSON object: {self._fixture_path}")
         return cast(JsonObject, {str(key): value for key, value in payload.items()})
 
+    # Requirements: book-converter.3, book-converter.8
+    def extract_book_metadata(self, source_path: Path) -> BookMetadata:
+        del source_path
+        payload = json.loads(self._fixture_path.read_text(encoding="utf-8"))
+        if not isinstance(payload, dict):
+            raise OcrProcessingError(f"OCR fixture must be a JSON object: {self._fixture_path}")
+        normalized_payload = cast(JsonObject, {str(key): value for key, value in payload.items()})
+        return extract_book_metadata(normalized_payload, fallback_title=self._fixture_path.stem)
+
 
 # Requirements: book-converter.3
 def build_front_pages_llm_prompt(page_count: int) -> str:
     return (
         f"Read only pages 1 through {page_count} of the attached book and return a JSON object "
-        'with shape {"pages": [...]}.\n'
+        'with shape {"title": string, "authors": [string], "language": string, "cover_subtitle": string|null, "toc": [...], "pages": [...]}.\n'
+        'The "toc" entries must contain "title", "page_index", and optional "level".\n'
+        "Use the first pages to identify the book title, authors, language, and the best possible table of contents.\n"
         "Each page entry must contain:\n"
         '- "index": zero-based page index from the original document\n'
         '- "markdown": the main page content as markdown\n'
@@ -200,7 +228,7 @@ def extract_assistant_text(content: object) -> str:
 
 
 # Requirements: book-converter.3
-def parse_llm_ocr_payload(content: str) -> JsonObject:
+def parse_llm_front_matter_payload(content: str) -> JsonObject:
     normalized_content = _strip_json_code_fence(content.strip())
     try:
         payload = json.loads(normalized_content)
@@ -213,6 +241,30 @@ def parse_llm_ocr_payload(content: str) -> JsonObject:
     if not isinstance(pages, list):
         raise OcrProcessingError('LLM OCR payload must contain a "pages" list.')
     return normalized_payload
+
+
+# Requirements: book-converter.3
+def extract_book_metadata(front_matter_payload: JsonObject, fallback_title: str) -> BookMetadata:
+    title = _as_non_empty_string(front_matter_payload.get("title")) or fallback_title
+    authors = _string_list(front_matter_payload.get("authors"))
+    language = _as_non_empty_string(front_matter_payload.get("language")) or "en"
+    cover_subtitle = _as_non_empty_string(front_matter_payload.get("cover_subtitle"))
+    toc_entries = [
+        TocEntry(
+            title=_as_non_empty_string(entry.get("title")) or f"Section {index + 1}",
+            page_index=max(0, _page_index(entry)),
+            level=max(1, _as_int(entry.get("level"), default=1)),
+        )
+        for index, entry in enumerate(_object_list(front_matter_payload.get("toc")))
+        if _as_non_empty_string(entry.get("title"))
+    ]
+    return BookMetadata(
+        title=title,
+        authors=authors,
+        language=language,
+        toc_entries=toc_entries,
+        cover_subtitle=cover_subtitle,
+    )
 
 
 # Requirements: book-converter.3
@@ -349,3 +401,31 @@ def _page_index(page_payload: JsonObject) -> int:
     if isinstance(raw_index, str) and raw_index.strip():
         return int(float(raw_index))
     return 0
+
+
+# Requirements: book-converter.3
+def _string_list(value: JsonValue | object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item).strip() for item in value if str(item).strip()]
+
+
+# Requirements: book-converter.3
+def _as_non_empty_string(value: JsonValue | object) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+# Requirements: book-converter.3
+def _as_int(value: JsonValue | object, default: int = 0) -> int:
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    if isinstance(value, str) and value.strip():
+        return int(float(value))
+    return default
