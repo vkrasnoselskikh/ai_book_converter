@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass
+from json import JSONDecodeError
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol, cast
 
@@ -167,13 +168,11 @@ def extract_assistant_text(content: object) -> str:
 
 # Requirements: book-converter.3
 def parse_llm_ocr_payload(content: str) -> JsonObject:
-    normalized_content = content.strip()
-    if normalized_content.startswith("```"):
-        normalized_content = normalized_content.strip("`")
-        if normalized_content.startswith("json"):
-            normalized_content = normalized_content[4:]
-        normalized_content = normalized_content.strip()
-    payload = json.loads(normalized_content)
+    normalized_content = _strip_json_code_fence(content.strip())
+    try:
+        payload = json.loads(normalized_content)
+    except JSONDecodeError as error:
+        raise OcrProcessingError(f"LLM OCR payload is not valid JSON: {error.msg}") from error
     if not isinstance(payload, dict):
         raise OcrProcessingError("LLM OCR payload must be a JSON object.")
     normalized_payload = cast(JsonObject, {str(key): value for key, value in payload.items()})
@@ -253,6 +252,21 @@ def _extract_text_chunk(chunk: object) -> str:
     if isinstance(text_value, str):
         return text_value
     return ""
+
+
+# Requirements: book-converter.3
+def _strip_json_code_fence(content: str) -> str:
+    if not content.startswith("```"):
+        return content
+    lines = content.splitlines()
+    if not lines:
+        return content
+    first_line = lines[0].strip()
+    if not first_line.startswith("```"):
+        return content
+    if len(lines) > 1 and lines[-1].strip() == "```":
+        return "\n".join(lines[1:-1]).strip()
+    return content
 
 
 # Requirements: book-converter.3

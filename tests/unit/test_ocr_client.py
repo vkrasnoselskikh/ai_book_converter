@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import pytest
+
+from ai_book_converter.errors import OcrProcessingError
 from ai_book_converter.ocr import merge_hybrid_ocr_payloads, parse_llm_ocr_payload
 
 
@@ -104,3 +107,13 @@ def test_should_parse_json_code_fences_from_llm_response() -> None:
 
     assert list(payload) == ["pages"]
     assert payload["pages"] == [{"index": 0, "markdown": "hello", "headers": [], "footers": [], "images": []}]
+
+
+# Requirements: book-converter.3
+def test_should_raise_clear_error_for_invalid_llm_json_payload() -> None:
+    """Preconditions: LLM returns malformed JSON content.
+    Action: Parse the LLM OCR payload.
+    Assertions: The parser raises an OCR processing error with a clear JSON validation message.
+    Requirements: book-converter.3"""
+    with pytest.raises(OcrProcessingError, match="LLM OCR payload is not valid JSON"):
+        parse_llm_ocr_payload('{"pages": [{"index": 0, "markdown": "unterminated}]')
