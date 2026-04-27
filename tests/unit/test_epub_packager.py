@@ -4,6 +4,7 @@ import zipfile
 from pathlib import Path
 
 from ai_book_converter.job import create_job_paths
+from ai_book_converter.models import PageContent, PageTable
 from ai_book_converter.processing import build_endnotes, extract_images, normalize_ocr_response
 from ai_book_converter.renderer import (
     publish_output,
@@ -14,6 +15,37 @@ from ai_book_converter.renderer import (
     write_book_artifacts,
 )
 from tests.helpers.fixtures import load_ocr_fixture
+
+
+# Requirements: book-converter.7
+def test_should_embed_table_html_in_rendered_sections() -> None:
+    """Preconditions: A normalized page contains a markdown link placeholder for an OCR table.
+    Action: Render body sections for the page.
+    Assertions: The rendered HTML contains the embedded table instead of a dead tbl-*.html link.
+    Requirements: book-converter.7"""
+    pages = [
+        PageContent(
+            page_index=0,
+            header_blocks=[],
+            body_markdown="Before table\n\n[tbl-0.html](tbl-0.html)\n\nAfter table",
+            footer_blocks=[],
+            images=[],
+            tables=[
+                PageTable(
+                    table_id="tbl-0.html",
+                    content_html="<table><tr><td>Embedded cell</td></tr></table>",
+                    page_index=0,
+                )
+            ],
+        )
+    ]
+
+    rendered_html = render_body_sections(pages, image_href_prefix="images")
+
+    assert "tbl-0.html" not in rendered_html
+    assert "<table>" in rendered_html
+    assert "Embedded cell" in rendered_html
+    assert "<p>After table</p>" in rendered_html
 
 
 # Requirements: book-converter.7
@@ -47,6 +79,9 @@ def test_should_build_epub_archive_with_required_files(tmp_path: Path) -> None:
         assert "<h1>" in content_xhtml_text
         assert '<img ' in content_xhtml_text
         assert 'src="images/' in content_xhtml_text
+        assert "tbl-0.html" not in content_xhtml_text
+        assert "tbl-1.html" not in content_xhtml_text
+        assert "<table>" in content_xhtml_text
         image_files = [name for name in epub_archive.namelist() if name.startswith("OEBPS/images/")]
         assert image_files
         for image_path in image_files:

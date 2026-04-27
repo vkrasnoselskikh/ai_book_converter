@@ -7,7 +7,7 @@ import re
 from pathlib import Path
 
 from ai_book_converter.json_types import JsonObject, JsonValue
-from ai_book_converter.models import Endnote, PageContent, PageImage
+from ai_book_converter.models import Endnote, PageContent, PageImage, PageTable
 
 
 logger = logging.getLogger(__name__)
@@ -77,6 +77,15 @@ def normalize_ocr_response(
             for image_payload in _object_list(page_payload.get("images"))
             if (page_index, str(image_payload.get("id", ""))) in saved_images
         ]
+        tables = [
+            PageTable(
+                table_id=str(table_payload.get("id", f"page-{page_index}-table.html")),
+                content_html=_as_string(table_payload.get("content")),
+                page_index=page_index,
+            )
+            for table_payload in _object_list(page_payload.get("tables"))
+            if _as_string(table_payload.get("content")).strip()
+        ]
         warnings: list[str] = []
         if not body_markdown.strip():
             warnings.append("Page body is empty after normalization.")
@@ -87,6 +96,7 @@ def normalize_ocr_response(
                 body_markdown=body_markdown,
                 footer_blocks=footer_blocks,
                 images=images,
+                tables=tables,
                 warnings=warnings,
             )
         )
@@ -141,6 +151,7 @@ def build_endnotes(pages: list[PageContent]) -> tuple[list[PageContent], list[En
                 body_markdown=body_markdown,
                 footer_blocks=page.footer_blocks,
                 images=page.images,
+                tables=page.tables,
                 warnings=page.warnings,
             )
         )

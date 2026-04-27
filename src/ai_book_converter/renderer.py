@@ -10,7 +10,7 @@ import markdown
 
 from ai_book_converter.errors import OutputPackagingError
 from ai_book_converter.job import JobPaths
-from ai_book_converter.models import Endnote, PageContent, PageImage
+from ai_book_converter.models import Endnote, PageContent, PageImage, PageTable
 
 
 logger = logging.getLogger(__name__)
@@ -20,7 +20,8 @@ logger = logging.getLogger(__name__)
 def render_body_sections(pages: list[PageContent], image_href_prefix: str) -> str:
     rendered_sections: list[str] = []
     for page in pages:
-        page_markdown = _replace_image_placeholders(page.body_markdown, page.images, image_href_prefix)
+        page_markdown = _replace_table_placeholders(page.body_markdown, page.tables)
+        page_markdown = _replace_image_placeholders(page_markdown, page.images, image_href_prefix)
         page_html = markdown.markdown(page_markdown, extensions=["extra", "attr_list"])
         page_html = _normalize_image_sources(page_html, image_href_prefix)
         rendered_sections.append(f'<section id="page-{page.page_index}">\n{page_html}\n</section>')
@@ -246,6 +247,18 @@ def _media_type_for_image(image_path: Path) -> str:
     if suffix == ".svg":
         return "image/svg+xml"
     return "application/octet-stream"
+
+
+# Requirements: book-converter.6, book-converter.7
+def _replace_table_placeholders(markdown_text: str, tables: list[PageTable]) -> str:
+    updated_markdown = markdown_text
+    for table in tables:
+        placeholder = f"[{table.table_id}]({table.table_id})"
+        table_html = table.content_html.strip()
+        if not table_html:
+            continue
+        updated_markdown = updated_markdown.replace(placeholder, f"\n\n{table_html}\n\n")
+    return updated_markdown
 
 
 # Requirements: book-converter.6, book-converter.7

@@ -46,12 +46,21 @@ class PageImage:
 
 # Requirements: book-converter.4, book-converter.5, book-converter.6
 @dataclass(frozen=True)
+class PageTable:
+    table_id: str
+    content_html: str
+    page_index: int
+
+
+# Requirements: book-converter.4, book-converter.5, book-converter.6
+@dataclass(frozen=True)
 class PageContent:
     page_index: int
     header_blocks: list[str]
     body_markdown: str
     footer_blocks: list[str]
     images: list[PageImage]
+    tables: list[PageTable] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
 
     # Requirements: book-converter.2, book-converter.4, book-converter.6
@@ -71,6 +80,14 @@ class PageContent:
                     "anchor_id": image.anchor_id,
                 }
                 for image in self.images
+            ],
+            "tables": [
+                {
+                    "table_id": table.table_id,
+                    "content_html": table.content_html,
+                    "page_index": table.page_index,
+                }
+                for table in self.tables
             ],
             "warnings": list(self.warnings),
         }
