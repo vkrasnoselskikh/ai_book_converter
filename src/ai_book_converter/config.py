@@ -10,6 +10,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_OCR_MODEL = "mistral-ocr-latest"
 DEFAULT_LLM_MODEL = "mistral-small-latest"
 HYBRID_LLM_PAGE_COUNT = 20
+FRONT_MATTER_PAGE_COUNT = 4
 JOB_DIR_PREFIX = "ai_book_converter_"
 SUPPORTED_EXTENSIONS = {".pdf", ".djvu"}
 

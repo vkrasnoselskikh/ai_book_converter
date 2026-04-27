@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import json
 import logging
+import tempfile
 from dataclasses import dataclass
 from json import JSONDecodeError
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol, cast
 
-from ai_book_converter.config import DEFAULT_LLM_MODEL, HYBRID_LLM_PAGE_COUNT
+from pypdf import PdfReader, PdfWriter
+
+from ai_book_converter.config import DEFAULT_LLM_MODEL, FRONT_MATTER_PAGE_COUNT, HYBRID_LLM_PAGE_COUNT
 from ai_book_converter.errors import OcrProcessingError
 from ai_book_converter.json_types import JsonObject, JsonValue
 
@@ -45,24 +48,54 @@ class HybridMistralOcrClient:
 
     # Requirements: book-converter.3
     def process_document(self, source_path: Path, model: str) -> JsonObject:
+        front_matter_document: Path | None = None
         try:
             from mistralai import Mistral
 
             with Mistral(api_key=self._api_key) as client:
+                logger.info("Starting file upload to Mistral: source=%s", source_path)
                 uploaded_document = self._upload_document(client, source_path)
+                logger.info(
+                    "Completed file upload to Mistral: file_id=%s signed_url_available=%s",
+                    uploaded_document.file_id,
+                    bool(uploaded_document.signed_url),
+                )
+                logger.info("Starting OCR request: file_id=%s model=%s", uploaded_document.file_id, model)
                 ocr_response = self._process_with_ocr(client, uploaded_document.file_id, model)
+                logger.info(
+                    "Completed OCR request: pages=%s",
+                    len(_object_list(ocr_response.get("pages"))),
+                )
+                front_matter_document = prepare_front_matter_document(source_path, FRONT_MATTER_PAGE_COUNT)
+                logger.info("Starting front matter LLM request: source=%s", front_matter_document)
+                uploaded_front_matter = self._upload_document(client, front_matter_document)
+                logger.info(
+                    "Completed front matter upload: file_id=%s signed_url_available=%s",
+                    uploaded_front_matter.file_id,
+                    bool(uploaded_front_matter.signed_url),
+                )
                 llm_response = self._process_front_pages_with_llm(
                     client=client,
-                    signed_url=uploaded_document.signed_url,
-                    source_name=source_path.name,
+                    signed_url=uploaded_front_matter.signed_url,
+                    source_name=front_matter_document.name,
+                )
+                logger.info(
+                    "Completed front matter LLM request: pages=%s",
+                    len(_object_list(llm_response.get("pages"))),
                 )
         except Exception as error:  # pragma: no cover - thin wrapper over external SDK
             raise OcrProcessingError(str(error)) from error
-        return merge_hybrid_ocr_payloads(
+        finally:
+            if front_matter_document is not None and front_matter_document != source_path and front_matter_document.exists():
+                front_matter_document.unlink(missing_ok=True)
+        logger.info("Starting hybrid OCR payload merge")
+        merged_payload = merge_hybrid_ocr_payloads(
             ocr_response=ocr_response,
             llm_response=llm_response,
             llm_page_count=self._llm_page_count,
         )
+        logger.info("Completed hybrid OCR payload merge: pages=%s", len(_object_list(merged_payload.get("pages"))))
+        return merged_payload
 
     # Requirements: book-converter.3
     def _upload_document(self, client: Mistral, source_path: Path) -> UploadedDocument:
@@ -93,7 +126,7 @@ class HybridMistralOcrClient:
         signed_url: str,
         source_name: str,
     ) -> JsonObject:
-        prompt = build_front_pages_llm_prompt(self._llm_page_count)
+        prompt = build_front_pages_llm_prompt(FRONT_MATTER_PAGE_COUNT)
         response = client.chat.complete(
             model=self._llm_model,
             temperature=0,
@@ -267,6 +300,32 @@ def _strip_json_code_fence(content: str) -> str:
     if len(lines) > 1 and lines[-1].strip() == "```":
         return "\n".join(lines[1:-1]).strip()
     return content
+
+
+# Requirements: book-converter.3
+def prepare_front_matter_document(source_path: Path, page_count: int) -> Path:
+    if source_path.suffix.lower() != ".pdf":
+        logger.info("Using original source for front matter because trimming is only supported for PDF: source=%s", source_path)
+        return source_path
+    logger.info("Preparing front matter PDF: source=%s page_count=%s", source_path, page_count)
+    trimmed_path = _prepare_front_matter_pdf(source_path, page_count)
+    logger.info("Prepared front matter PDF: trimmed_source=%s", trimmed_path)
+    return trimmed_path
+
+
+# Requirements: book-converter.3
+def _prepare_front_matter_pdf(source_path: Path, page_count: int) -> Path:
+    reader = PdfReader(str(source_path))
+    writer = PdfWriter()
+    selected_pages = min(page_count, len(reader.pages))
+    for page_index in range(selected_pages):
+        writer.add_page(reader.pages[page_index])
+    temporary_file = tempfile.NamedTemporaryFile(prefix="ai_book_converter_front_matter_", suffix=".pdf", delete=False)
+    temporary_path = Path(temporary_file.name)
+    temporary_file.close()
+    with temporary_path.open("wb") as output_stream:
+        writer.write(output_stream)
+    return temporary_path
 
 
 # Requirements: book-converter.3

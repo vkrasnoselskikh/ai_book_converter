@@ -22,6 +22,7 @@ def render_body_sections(pages: list[PageContent], image_href_prefix: str) -> st
     for page in pages:
         page_markdown = _replace_image_placeholders(page.body_markdown, page.images, image_href_prefix)
         page_html = markdown.markdown(page_markdown, extensions=["extra", "attr_list"])
+        page_html = _normalize_image_sources(page_html, image_href_prefix)
         rendered_sections.append(f'<section id="page-{page.page_index}">\n{page_html}\n</section>')
     return "\n\n".join(rendered_sections)
 
@@ -255,10 +256,17 @@ def _replace_image_placeholders(
 ) -> str:
     updated_markdown = markdown_text
     for image in images:
+        image_name = Path(image.source_path).name
         placeholder = f"![{image.image_id}]({image.image_id})"
-        replacement = (
-            f'<img src="{image_href_prefix}/{Path(image.source_path).name}" '
-            f'alt="{image.image_id}" width="{image.width}" height="{image.height}" />'
-        )
-        updated_markdown = updated_markdown.replace(placeholder, replacement)
+        markdown_image = f"![{image.image_id}]({image_href_prefix}/{image_name})"
+        updated_markdown = updated_markdown.replace(placeholder, markdown_image)
     return updated_markdown
+
+
+# Requirements: book-converter.6, book-converter.7
+def _normalize_image_sources(rendered_html: str, image_href_prefix: str) -> str:
+    normalized_html = rendered_html
+    normalized_html = normalized_html.replace('src="../', 'src="')
+    if image_href_prefix == "../images":
+        return normalized_html
+    return normalized_html.replace('src="images/', f'src="{image_href_prefix}/')

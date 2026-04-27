@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from pypdf import PdfWriter
+
 from ai_book_converter.json_types import JsonObject
 
 
@@ -15,7 +17,13 @@ OCR_SOURCE_ASSET_PATH = ASSET_ROOT / "Паттерны разработки на
 # Requirements: book-converter.1, book-converter.8
 def create_dummy_source_document(tmp_path: Path, suffix: str = ".pdf") -> Path:
     source_path = tmp_path / f"sample{suffix}"
-    source_path.write_bytes(b"%PDF-1.4\n%dummy content\n")
+    if suffix == ".pdf":
+        writer = PdfWriter()
+        writer.add_blank_page(width=200, height=200)
+        with source_path.open("wb") as file_handle:
+            writer.write(file_handle)
+        return source_path
+    source_path.write_bytes(b"DJVU dummy content\n")
     return source_path
 
 

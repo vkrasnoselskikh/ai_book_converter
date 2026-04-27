@@ -127,8 +127,12 @@ def load_state(job_paths: JobPaths) -> PipelineState | None:
 # Requirements: book-converter.2
 def copy_source_document(job_paths: JobPaths, source_path: Path) -> Path:
     destination = job_paths.source_copy_path(source_path.suffix.lower())
-    if not destination.exists():
-        shutil.copy2(source_path, destination)
+    if destination.exists():
+        logger.info("Reusing copied source document: path=%s", destination)
+        return destination
+    logger.info("Copying source document into job directory: source=%s destination=%s", source_path, destination)
+    shutil.copy2(source_path, destination)
+    logger.info("Copied source document into job directory: destination=%s", destination)
     return destination
 
 

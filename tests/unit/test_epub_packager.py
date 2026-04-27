@@ -45,6 +45,10 @@ def test_should_build_epub_archive_with_required_files(tmp_path: Path) -> None:
         content_xhtml_text = epub_archive.read("OEBPS/content.xhtml").decode("utf-8")
         assert "<section" in content_xhtml_text
         assert "<h1>" in content_xhtml_text
-        assert "<img " in content_xhtml_text
+        assert '<img ' in content_xhtml_text
+        assert 'src="images/' in content_xhtml_text
         image_files = [name for name in epub_archive.namelist() if name.startswith("OEBPS/images/")]
         assert image_files
+        for image_path in image_files:
+            image_name = image_path.removeprefix("OEBPS/")
+            assert image_name in content_xhtml_text
