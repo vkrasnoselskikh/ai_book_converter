@@ -1,157 +1,156 @@
-# Руководство для агента
+# Agent Guide
 
-Этот документ описывает обязательные правила, процессы и форматы работы для Python-проекта.
+This document describes mandatory rules, processes, and working formats for the Python project.
 
 ---
 
-## 1. Быстрые команды
+## 1. Quick Commands
 
-### линтинг
+### Linting
 
 ```bash
 uv run ruff check .
 ```
 
-### Тесты
+### Tests
 
 ```bash
-uv run pytest                      # все тесты
+uv run pytest                      # all tests
 ```
 
-### Сборка и окружение
-
+### Build and Environment
 
 ```bash
 uv venv
 uv sync --dev
 ```
 
-А так же убедится что присутствуют переменные окружения из .env.example или определен .env файл в проекте.
+Also make sure that the environment variables from `.env.example` are present or that a `.env` file is defined in the project.
 
 ---
 
-## 2. Обязательный workflow
+## 2. Mandatory Workflow
 
-Каждую задачу выполнять по шагам.
+Perform every task step by step.
 
-### Шаг 1: Сбор контекста
+### Step 1: Gather Context
 
-1. Получить список спецификаций в `specs/`
-2. Определить релевантные спецификации
-3. Для каждой релевантной спецификации прочитать:
+1. Get the list of specifications in `specs/`
+2. Identify the relevant specifications
+3. For each relevant specification, read:
     - `requirements.md`
     - `design.md`
-    - `tasks.md` (если есть)
-4. Изучить связанный код
-5. Изучить существующие тесты
+    - `tasks.md` (if present)
+4. Study the related code
+5. Study the existing tests
 
-### Шаг 2: План
+### Step 2: Plan
 
-Составить план и **получить подтверждение пользователя** до начала изменений.
+Create a plan and **get user confirmation** before making changes.
 
-**Запрет:** до подтверждения плана нельзя менять код, тесты или документацию.
+**Prohibition:** before the plan is confirmed, do not change code, tests, or documentation.
 
-Чеклист готовности:
+Readiness checklist:
 
-- План подтвержден: да/нет
+- Plan confirmed: yes/no
 
 ```
-План действий:
-1. Изменить файл X — добавить функцию Y
-2. Добавить тест Z для проверки Y
-3. Обновить tasks.md (если используется)
-4. Запустить валидацию
+Action plan:
+1. Change file X — add function Y
+2. Add test Z to verify Y
+3. Update tasks.md (if used)
+4. Run validation
 
-Ожидаемый результат: [описание]
-Риски: [если есть]
+Expected result: [description]
+Risks: [if any]
 ```
 
-### Шаг 3: Выполнение
+### Step 3: Implementation
 
-- Выполнять план пошагово
-- После значимых изменений запускать релевантные модульные тесты
-- Добавлять requirement-комментарии в код
-- Писать тесты в требуемой структуре (см. раздел 6)
-- **Запрет:** не удалять и не менять поведение из требований без подтверждения пользователя
+- Execute the plan step by step
+- After significant changes, run the relevant unit tests
+- Add requirement comments to code
+- Write tests using the required structure (see section 6)
+- **Prohibition:** do not remove or change behavior from requirements without user confirmation
 
-### Шаг 4: Завершение
+### Step 4: Completion
 
-1. Проверить, что спецификации полные, непротиворечивые и актуальные
-2. Проверить соответствие кода требованиям и дизайну
-3. Запустить 
+1. Verify that specifications are complete, consistent, and up to date
+2. Verify that the code matches the requirements and design
+3. Run:
 ```shell
 make lint
 make test 
 ```
-4. Убедиться, что все проверки прошли:
+4. Make sure all checks passed:
     - ✅ Ruff check
     - ✅ Ruff format
     - ✅ ty check
     - ✅ Pytest with coverage
 
-### Шаг 5: Отчет
+### Step 5: Report
 
-Дать короткий отчет в сообщении (без создания отдельных файлов):
+Provide a short report in the message (without creating separate files):
 
 ```
-Задача завершена.
+Task completed.
 
-Реализовано:
-- [пункт 1]
+Implemented:
+- [item 1]
 
-Измененные файлы:
-- [файл 1]
+Changed files:
+- [file 1]
 
-Добавлены/обновлены тесты:
-- [тест 1]
+Added/updated tests:
+- [test 1]
 
-Что осталось:
-- [пункт 1] (если есть)
+Remaining:
+- [item 1] (if any)
 ```
 
 ---
 
-## 3. Работа со спецификациями
+## 3. Working with Specifications
 
-### Структура спецификаций
+### Specification Structure
 
-Все спецификации находятся в `specs/<feature-name>/`.
+All specifications are located in `specs/<feature-name>/`.
 
 ```
 specs/
   <feature-name>/
     requirements.md
     design.md
-    tasks.md          # опционально
+    tasks.md          # optional
 ```
 
-### Что читать перед началом
+### What to Read Before Starting
 
-Обязательно:
+Required:
 
 ```
 specs/<feature>/requirements.md
 specs/<feature>/design.md
 ```
 
-Если есть `tasks.md`, его тоже нужно прочитать.
+If `tasks.md` exists, it must be read as well.
 
 ---
 
-### Формат requirements.md
+### requirements.md Format
 
-`requirements.md` описывает **что** должно быть реализовано.
+`requirements.md` describes **what** must be implemented.
 
 ```markdown
 # Requirements Document: <Feature Name>
 
 ## Introduction
 
-Краткое описание цели.
+A brief description of the goal.
 
 ## Glossary
 
-- **Term** - определение
+- **Term** - definition
 
 ## Requirements
 
@@ -163,35 +162,35 @@ specs/<feature>/design.md
 
 #### Acceptance Criteria
 
-1.1. [Требование]
-1.2. [Требование]
-1.2.1. WHEN [условие], THEN [результат]
+1.1. [Requirement]
+1.2. [Requirement]
+1.2.1. WHEN [condition], THEN [result]
 
 #### Functional Tests
 
 - `tests/functional/test_<feature>.py` - "test name"
 ```
 
-Правила:
+Rules:
 
 - ID: `<feature-id>.<group>.<item>`
-- У каждой User Story должен быть раздел тестов
-- Язык: русский
-- Критерии приемки в формате EARS
+- Every User Story must have a tests section
+- Language: Russian
+- Acceptance criteria must use the EARS format
 
 ---
 
-### Разделение requirements/design
+### Separation of requirements/design
 
-- `requirements.md` описывает только пользовательское поведение и результат
-- `requirements.md` не должен содержать деталей реализации (имена классов/методов, сигнатуры, внутренние структуры)
-- Все технические детали должны быть в `design.md`
+- `requirements.md` describes only user behavior and the result
+- `requirements.md` must not contain implementation details (class/method names, signatures, internal structures)
+- All technical details must be in `design.md`
 
 ---
 
-### EARS для критериев приемки
+### EARS for Acceptance Criteria
 
-Шаблоны:
+Templates:
 
 **Ubiquitous**
 
@@ -223,52 +222,45 @@ WHILE <state>, <subject> SHALL <action>
 WHERE <support condition>, <subject> SHALL <action>
 ```
 
-**Комбинированный шаблон**
+**Combined template**
 
 ```
 WHEN <trigger>, IF <condition>, <subject> SHALL <action>
 ```
 
-Ключевые слова:
+Keywords:
 
-- `SHALL` — обязательно
-- `SHOULD` — рекомендуется
-- `MAY` — опционально
-- `SHALL NOT` — запрещено
-
-Русская адаптация:
-
-- `КОГДА` = WHEN
-- `ЕСЛИ` = IF
-- `ПОКА` = WHILE
-- `ТО ... ДОЛЖЕН` = SHALL
+- `SHALL` — mandatory
+- `SHOULD` — recommended
+- `MAY` — optional
+- `SHALL NOT` — prohibited
 
 ---
 
-### Формат design.md
+### design.md Format
 
-`design.md` описывает **как** реализована функциональность: архитектура, компоненты, потоки данных.
+`design.md` describes **how** the functionality is implemented: architecture, components, data flows.
 
 ```markdown
 # Design: <Feature Name>
 
 ## Overview
 
-Краткий архитектурный подход.
+A brief architectural approach.
 
 ## [Architecture Sections]
 
-Например: "Data Model", "Service Layer", "API Layer", "Background Jobs", "Algorithms".
+For example: "Data Model", "Service Layer", "API Layer", "Background Jobs", "Algorithms".
 
 ## Testing Strategy
 
 ### Unit Tests
 
-- `tests/unit/test_<module>.py` - что проверяет
+- `tests/unit/test_<module>.py` - what it verifies
 
 ### Functional Tests
 
-- `tests/functional/test_<feature>.py` - что проверяет
+- `tests/functional/test_<feature>.py` - what it verifies
 
 ### Requirements Coverage
 
@@ -278,24 +270,24 @@ WHEN <trigger>, IF <condition>, <subject> SHALL <action>
 | feature.1.2 | ✓          | ✓                 |
 ```
 
-Правила:
+Rules:
 
-- Таблица покрытия обязательна и должна покрывать все требования
-- Названия модулей/классов указывать на английском в кавычках
-- Язык: русский
+- The coverage table is mandatory and must cover all requirements
+- Module/class names must be specified in English and in quotes
+- Language: Russian
 
 ---
 
-### Формат tasks.md
+### tasks.md Format
 
-`tasks.md` отслеживает прогресс реализации.
+`tasks.md` tracks implementation progress.
 
 ```markdown
 # Task List: <Feature Name>
 
 ## Overview
 
-Краткое описание и оценка.
+A brief description and estimate.
 
 **Current status:** Phase N - [name]
 
@@ -303,7 +295,7 @@ WHEN <trigger>, IF <condition>, <subject> SHALL <action>
 
 ## CRITICAL RULES
 
-[Нарушать нельзя]
+[Must not be violated]
 
 ---
 
@@ -326,58 +318,57 @@ WHEN <trigger>, IF <condition>, <subject> SHALL <action>
 - [ ] Task B
 ```
 
-Правила обновления:
+Update rules:
 
-- Завершенную задачу переносить в `Completed` с ✅
-- Начатую задачу отмечать в `In Progress` с 🔄
-- Добавлять краткий комментарий о выполненном
-- Обновлять `Current status` при завершении фазы
-
----
-
-### Создание новой спецификации
-
-1. Создать `specs/<feature-name>/`
-2. Создать `requirements.md`
-3. Создать `design.md`
-4. При необходимости создать `tasks.md`
-5. Получить подтверждение пользователя до реализации
-
-Именование фич: lowercase с дефисами, например `token-management-ui`.
+- Move completed tasks to `Completed` with ✅
+- Mark started tasks in `In Progress` with 🔄
+- Add a brief comment about what was done
+- Update `Current status` when a phase is completed
 
 ---
 
-### Обновление спецификаций
+### Creating a New Specification
 
-При изменениях кода обязательно обновлять:
+1. Create `specs/<feature-name>/`
+2. Create `requirements.md`
+3. Create `design.md`
+4. Create `tasks.md` if needed
+5. Get user confirmation before implementation
 
-- изменилось поведение -> `requirements.md`
-- изменилась архитектура -> `design.md`
-- выполнены задачи -> `tasks.md`
-- добавлены тесты -> таблицу покрытия в `design.md`
-
-Спецификации должны быть полными, согласованными и актуальными.
+Feature naming: lowercase with hyphens, for example `token-management-ui`.
 
 ---
 
-## 4. Стратегия тестирования
+### Updating Specifications
 
-### Типы тестов
+When code changes, always update:
 
-| Тип        | Расположение                 | Моки  | Цель                               |
+- behavior changed -> `requirements.md`
+- architecture changed -> `design.md`
+- tasks completed -> `tasks.md`
+- tests added -> coverage table in `design.md`
+
+Specifications must be complete, consistent, and up to date.
+
+---
+
+## 4. Testing Strategy
+
+### Test Types
+
+| Type       | Location                     | Mocks | Goal                               |
 |------------|------------------------------|-------|------------------------------------|
-| Unit       | `tests/unit/test_*.py`       | ✅ Да  | Изолированная проверка логики      |
-| Functional | `tests/functional/test_*.py` | ❌ Нет | Сквозные пользовательские сценарии |
+| Unit       | `tests/unit/test_*.py`       | ✅ Yes | Isolated logic verification        |
+| Functional | `tests/functional/test_*.py` | ❌ No  | End-to-end user scenarios          |
 
-Термины `unit` и `functional` соответствуют: модульные и функциональные (сквозные).
+The terms `unit` and `functional` mean unit and functional (end-to-end), respectively.
 
-### Правила для тестов
+### Test Rules
 
-**testing.10 — helper-функции:** использовать общие helper-утилиты из `tests/helpers/`, не дублировать инфраструктурный
-код в каждом тесте.
+**testing.10 — helper functions:** use shared helper utilities from `tests/helpers/`; do not duplicate infrastructure
+code in every test.
 
-**testing.11 — ожидания:** не использовать `time.sleep` для ожидания состояния, если есть возможность проверять
-состояние через retry/awaitable assertions.
+**testing.11 — waits:** do not use `time.sleep` to wait for state if the state can be checked via retry/awaitable assertions.
 
 ```python
 # ❌ WRONG
@@ -390,57 +381,56 @@ assert service.is_ready()
 assert wait_until(lambda: service.is_ready(), timeout=2.0)
 ```
 
-`time.sleep` допустим только при известных таймингах, которые нельзя проверить иначе, и с обязательным комментарием
-почему.
+`time.sleep` is allowed only for known timings that cannot be checked otherwise, and must include a required comment
+explaining why.
 
-**testing.12 — проверка ошибок:** после ключевых действий проверять, что операция завершилась без неожиданных
-ошибок/исключений.
+**testing.12 — error checks:** after key actions, verify that the operation completed without unexpected errors/exceptions.
 
-### Требования к покрытию
+### Coverage Requirements
 
-Минимум:
+Minimum:
 
-- Обязательная проверка покрытия ДОЛЖНА выполняться командой `uv run pytest --cov=src --cov-fail-under=85`.
-- Минимальный исполняемый порог общего покрытия — 85%.
+- Mandatory coverage verification MUST be performed with `uv run pytest --cov=src --cov-fail-under=85`.
+- The minimum enforceable overall coverage threshold is 85%.
 
-Исключения: миграции, конфиги, декларативные типы без логики.
+Exceptions: migrations, configs, declarative types without logic.
 
-### Определения
+### Definitions
 
-- **Edge cases**: границы, пустые значения, `None`, min/max
-- **Exceptional situations**: сетевые ошибки, недоступные ресурсы, таймауты, невалидный ввод
+- **Edge cases**: boundaries, empty values, `None`, min/max
+- **Exceptional situations**: network errors, unavailable resources, timeouts, invalid input
 
 ---
 
-## 5. Запуск тестов
+## 5. Running Tests
 
-### Подготовка
+### Preparation
 
-Перед запуском тестов подготовить окружение:
+Prepare the environment before running tests:
 
 ```bash
 uv venv
 uv sync --dev
 ```
 
-Запускать повторно при необходимости:
+Run again when needed:
 
-- смена версии Python
-- изменение зависимостей
-- ошибки импорта/нативных пакетов
-- первый запуск после клонирования
+- Python version changes
+- dependency changes
+- import/native package errors
+- first run after cloning
 
-Ограничение:
+Restriction:
 
-- ❌ Не запускать функциональные тесты параллельно с другими тяжелыми проверками
+- ❌ Do not run functional tests in parallel with other heavy checks
 
 ---
 
-## 6. Правила написания кода
+## 6. Code Writing Rules
 
-### Requirement-комментарии
+### Requirement Comments
 
-Каждая функция, класс и метод должны иметь комментарий с ID требований:
+Every function, class, and method must have a comment with requirement IDs:
 
 ```python
 # Requirements: feature-id.1.1, feature-id.1.2
@@ -448,14 +438,16 @@ def implement_feature() -> None:
     pass
 ```
 
-### Правила типизации 
-Используй современный синтаксис
-- Предпочитай `list[str]` вместо `List[str]`
-- Используй `X | None` вместо `Optional[X]`
+### Typing Rules
 
-### Структура теста
+Use modern syntax:
 
-Каждый тест должен содержать структурированный docstring:
+- Prefer `list[str]` over `List[str]`
+- Use `X | None` instead of `Optional[X]`
+
+### Test Structure
+
+Every test must contain a structured docstring:
 
 ```python
 def test_should_perform_expected_behavior() -> None:
@@ -466,9 +458,9 @@ def test_should_perform_expected_behavior() -> None:
     pass
 ```
 
-### Логгер
+### Logger
 
-Каждый модуль создает собственный логгер с именем модуля:
+Every module creates its own logger using the module name:
 
 ```python
 import logging
@@ -477,11 +469,11 @@ logger = logging.getLogger(__name__)
 logger.info("User ID set: abc123")
 ```
 
-Не дублировать имя модуля вручную в самом сообщении лога.
+Do not manually duplicate the module name in the log message itself.
 
-### Обработка ошибок
+### Error Handling
 
-Для ошибок в фоновых процессах использовать централизованный обработчик (например,
+For errors in background processes, use a centralized handler (for example,
 `ErrorHandler.handle_background_error`).
 
 ```python
@@ -493,102 +485,66 @@ def fetch_profile(self) -> UserProfile | None:
         return None
 ```
 
-Локальное логирование без единого обработчика допускается только если это явно описано в дизайне.
+Local logging without a unified handler is allowed only if it is explicitly described in the design.
 
 ---
 
-## 7. Правила документации
+## 7. Documentation Rules
 
-### Язык
+### Language
 
-| Файл/контент                           | Язык    |
-|----------------------------------------|---------|
-| requirements.md                        | Русский |
-| design.md                              | Русский |
-| tasks.md                               | Русский |
-| Комментарии в коде                     | English |
-| GitLab-based (issues/MR/review/commit) | English |
-| Имена файлов/переменных                | English |
+| File/content                           | Language |
+|----------------------------------------|----------|
+| requirements.md                        | Russian  |
+| design.md                              | Russian  |
+| tasks.md                               | Russian  |
+| Code comments                          | English  |
+| GitLab-based (issues/MR/review/commit) | English  |
+| File/variable names                    | English  |
 
-### Именование
+### Naming
 
-- Имена модулей, классов и функций — на английском
-- Для классов использовать `PascalCase`
-- Для функций/переменных — `snake_case`
-- При упоминании компонентов в документах использовать кавычки
+- Module, class, and function names must be in English
+- Use `PascalCase` for classes
+- Use `snake_case` for functions/variables
+- When mentioning components in documents, use quotes
 
-### Работа с GitLab и Jira
+---
 
-Если нужно работать с GitLab:
+## 8. Critical Prohibitions
 
-- использовать хост `https://gitlab.loc`
-- использовать токен из `.env`: `GITLAB_PERSONAL_ACCESS_TOKEN`
-- для merge request сначала получать metadata MR, текущий HEAD и список существующих discussions
-- перед новыми комментариями проверять existing threads и не дублировать уже оставленные замечания
-- если merge request сдвинулся на новый HEAD во время работы, перепроверять incremental diff и удалять или обновлять устаревшие комментарии
-- все комментарии в GitLab писать только по-русски
-- все замечания оставлять только inline thread на конкретной строке diff
-- использовать формат комментария:
+### Disabling Tests
 
-```text
-Priority: P0-P3
+**Absolute prohibition:** do not use `@pytest.mark.skip`, `@pytest.mark.xfail`, and do not comment out tests without explicit
+user permission.
 
-Risk: ...
+Before disabling a test, you must:
 
-Why: ...
+1. Explain why the test cannot be fixed immediately
+2. Suggest alternatives
+3. Get explicit confirmation
 
-What to change: ...
+### Report Files
+
+Do not create `VALIDATION_REPORT.md`, `SUMMARY.md`, `WORK_REPORT.md` without a direct user request.
+
+Correct format: a short summary in the message.
+
+### Environment Variables
+
+It is forbidden to introduce new environment variables (`os.environ[...]`) without user approval.
+
+If the variable is approved, it must be declared in the module's `config.py`.
+For example: `src/<module>/config.py`
+
+All environment variables must be declared using `Pydantic Settings`.
+
+Each configuration class must contain settings (so it can optionally read from `.env`):
+```python
+model_config = SettingsConfigDict(validate_default=False, extra="ignore", env_file=".env")
 ```
 
-- между блоками `Priority`, `Risk`, `Why` и `What to change` всегда оставлять пустые строки
-- не вставлять текст комментария прямо в shell-строку, если в нем есть спецсимволы, обратные кавычки или `$`
-- для отправки текста использовать файл и `curl --data-urlencode body@file` или другой способ без shell interpolation
-- если комментарий уже отправлен с поврежденным текстом, удалить его и отправить заново в корректном виде
-
-Если нужно работать с Jira:
-
-- использовать хост `https://tasks.loc`
-- использовать токен из `.env`: `JIRA_PERSONAL_ACCESS_TOKEN`
-- для API использовать заголовок `Authorization: Bearer <token>`
-- если прямой URL неочевиден, получать issue через REST API вида `/rest/api/2/issue/<KEY>`
-- если видишь упоминание Jira key в merge request, ветке, описании задачи или комментариях, можно получить тикет через Jira API и использовать его как источник контекста
-- при анализе изменений сверять код не только со спеками и тестами, но и с содержимым тикета
-- если требования тикета расходятся с кодом, спеками или merge request description, считать это проблемой и явно указывать расхождение
-
----
-
-## 8. Критические запреты
-
-### Отключение тестов
-
-**Абсолютный запрет:** не использовать `@pytest.mark.skip`, `@pytest.mark.xfail` и не комментировать тесты без явного
-разрешения пользователя.
-
-Перед отключением теста нужно:
-
-1. Объяснить, почему тест нельзя исправить сразу
-2. Предложить альтернативы
-3. Получить явное подтверждение
-
-### Отчетные файлы
-
-Нельзя создавать `VALIDATION_REPORT.md`, `SUMMARY.md`, `WORK_REPORT.md` без прямого запроса пользователя.
-
-Правильный формат: короткий итог в сообщении.
-
-### Переменные окружения
-
-Запрещено вводить новые переменные окружения (`os.environ[...]`) без согласования с пользователем.
-
-Если переменная согласована, то переменная должна быть объявлена в `config.py` - модуля.
-Например: `src/<module>/config.py`
-
-Все переменные окружения должны объявляться с помощью `Pydantic Settings`. 
-
-Каждый класс конфигурации должен содержать настройки (чтобы опционально читать из .env):
-```model_config = SettingsConfigDict(validate_default=False, extra="ignore", env_file=".env")```
-
-Пример конфигурации App:
+Example App configuration:
 ```python
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -601,23 +557,23 @@ class AppConfig(BaseSettings):
 
 ---
 
-## 9. Приоритеты при конфликтах
+## 9. Priorities in Case of Conflicts
 
-1. Безопасность данных
-2. Явные инструкции пользователя
-3. Минимизация лишних действий/долгих запусков
-4. Эффективность (не гонять весь набор тестов, если достаточно целевых)
-5. Качество кода (не отключать тесты, исправлять причину)
+1. Data safety
+2. Explicit user instructions
+3. Minimize unnecessary actions/long runs
+4. Efficiency (do not run the entire test suite if targeted tests are enough)
+5. Code quality (do not disable tests; fix the cause)
 
 ---
 
-## 10. Частые проблемы и решения
+## 10. Common Problems and Solutions
 
-| Проблема                       | Причина                       | Решение                                                                 |
-|--------------------------------|-------------------------------|-------------------------------------------------------------------------|
-| `ModuleNotFoundError`          | Нет venv или зависимостей     | `uv venv && uv sync --dev`                                              |
-| Таймаут теста                  | Тест дольше ожидаемого        | увеличить timeout и проверить ожидания состояния                        |
-| Падает линтер                  | Нарушение стиля               | `uv run ruff check . --fix`                                             |
-| Низкое покрытие                | Недостаточно тестов           | запустить `uv run pytest --cov=src --cov-fail-under=85`, прочитать отчет покрытия, определить файлы с низким покрытием и дописать для них тесты |
-| Команда прервалась по таймауту | Долгий прогон                 | запускать в фоне и мониторить                                           |
-| Тесты стартовали дважды        | Не проверили активный процесс | перед запуском проверять текущие процессы                               |
+| Problem                        | Cause                           | Solution                                                                                                               |
+|--------------------------------|---------------------------------|------------------------------------------------------------------------------------------------------------------------|
+| `ModuleNotFoundError`          | No venv or dependencies         | `uv venv && uv sync --dev`                                                                                             |
+| Test timeout                   | Test takes longer than expected | increase timeout and verify state expectations                                                                         |
+| Linter fails                   | Style violation                 | `uv run ruff check . --fix`                                                                                            |
+| Low coverage                   | Not enough tests                | run `uv run pytest --cov=src --cov-fail-under=85`, read the coverage report, identify low-coverage files, and add tests |
+| Command interrupted by timeout | Long run                        | run in the background and monitor                                                                                      |
+| Tests started twice            | Active process was not checked  | check current processes before running tests                                                                           |

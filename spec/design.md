@@ -2,36 +2,32 @@
 
 ## Overview
 
-Система реализуется как CLI-пайплайн, который принимает исходный документ книги, создает отдельный "OCR job",
-запрашивает у Mistral гибридный постраничный результат и собирает итоговую reflowable-книгу в формате EPUB.
+The system is implemented as a CLI pipeline that accepts a source book document, creates a separate `OCR job`, requests a hybrid page-by-page result from Mistral, and assembles the final reflowable book in EPUB format.
 
-Текущая реализация уже содержит базовый пайплайн в модуле `"pdf_ocr.py"`: загрузка PDF, вызов OCR, сохранение JSON,
-извлечение изображений и сборка HTML. Целевая архитектура расширяет это поведение до полноценной CLI-утилиты с
-поддержкой DJVU, гибридным OCR для первых 20 страниц через multimodal LLM, сборкой EPUB, обработкой footer-сносок как
-endnotes и тестовой стратегией без повторных live API calls.
+The current implementation already contains a basic pipeline in the `pdf_ocr.py` module: PDF upload, OCR call, JSON saving, image extraction, and HTML assembly. The target architecture extends this behavior into a full CLI utility with DJVU support, hybrid OCR for the first 20 pages through a multimodal LLM, EPUB assembly, footer footnote handling as endnotes, and a testing strategy without repeated live API calls.
 
 ## Architecture
 
 ### CLI Layer
 
-CLI-команда должна:
+The CLI command must:
 
-- валидировать входной путь и формат документа;
-- поддерживать опциональный путь к job directory и путь к выходному файлу;
-- позволять переиспользовать ранее созданный job directory;
-- запускать весь пайплайн либо отдельные этапы для диагностики и отладки.
+- validate the input path and document format;
+- support an optional job directory path and output file path;
+- allow reuse of a previously created job directory;
+- run the entire pipeline or individual stages for diagnostics and debugging.
 
-Рекомендуемый состав CLI-аргументов:
+Recommended CLI arguments:
 
-- обязательный аргумент пути к исходной книге;
-- `--job-dir` как опциональный аргумент для переиспользования или явного размещения артефактов;
-- `--output` как опциональный аргумент для итогового файла;
-- `--model` как опциональный аргумент для OCR-модели;
-- опциональный флаг `--keep-temp` или эквивалентный флаг для сохранения временной директории по завершении.
+- required argument for the source book path;
+- `--job-dir` as an optional argument for artifact reuse or explicit placement;
+- `--output` as an optional argument for the final file;
+- `--model` as an optional argument for the OCR model;
+- optional `--keep-temp` flag or an equivalent flag for preserving the temporary directory after completion.
 
 ### Pipeline Stages
 
-Пайплайн должен быть разбит на явные этапы:
+The pipeline must be split into explicit stages:
 
 1. `validate_input`
 2. `prepare_job_dir`
@@ -46,19 +42,15 @@ CLI-команда должна:
 11. `package_epub`
 12. `write_outputs`
 
-Каждый этап должен быть идемпотентен относительно сохраненного состояния job directory.
+Each stage must be idempotent with respect to the saved job directory state.
 
 ### Job Directory Layout
 
-Временная директория должна хранить все артефакты, нужные для повторного запуска и диагностики.
+The temporary directory must store all artifacts required for reruns and diagnostics.
 
-Если пользователь не передал `--job-dir`, система должна создавать job directory внутри `tempfile.tempdir()`.
-Если job directory была создана автоматически во временной директории, система должна удалять ее после успешного
-завершения обработки по умолчанию. Если пользователь явно передал `--job-dir`, система не должна удалять ее
-автоматически. CLI должен предоставлять опциональный флаг, позволяющий сохранить автоматически созданную временную
-директорию после завершения.
+If the user did not pass `--job-dir`, the system must create a job directory inside `tempfile.tempdir()`. If the job directory was created automatically in a temporary directory, the system must delete it by default after successful processing. If the user explicitly passed `--job-dir`, the system must not delete it automatically. The CLI must provide an optional flag that allows preserving an automatically created temporary directory after completion.
 
-Предлагаемая структура:
+Proposed structure:
 
 ```text
 job_dir/
@@ -82,12 +74,11 @@ job_dir/
     pipeline.log
 ```
 
-Текущие файлы `"state.json"`, `"ocr_response.json"`, `"images/"` и `"content.html"` из `"pdf_ocr.py"` должны быть
-сохранены как основа, но разнесены по более явной структуре каталогов.
+The current `state.json`, `ocr_response.json`, `images/`, and `content.html` files from `pdf_ocr.py` must be preserved as the foundation, but distributed into a clearer directory structure.
 
 ## OCR Response Model
 
-Нормализованный OCR-ответ должен описывать страницу как структуру:
+The normalized OCR response must describe a page as the following structure:
 
 - `page_index`
 - `body_markdown`
@@ -96,7 +87,7 @@ job_dir/
 - `images: list[PageImage]`
 - `warnings: list[str]`
 
-`PageImage` должна содержать:
+`PageImage` must contain:
 
 - `image_id`
 - `source_path`
@@ -105,159 +96,148 @@ job_dir/
 - `page_index`
 - `anchor_id`
 
-Нормализация нужна потому, что фактический ответ OCR может содержать сырой markdown страницы вместе с отдельными
-метаданными header/footer/images, а логика сборки книги должна работать на стабильной внутренней модели.
+Normalization is needed because the actual OCR response may contain raw page markdown together with separate header/footer/image metadata, while the book assembly logic must work on a stable internal model.
 
 ## Input Format Support
 
 ### PDF
 
-PDF должен передаваться в Mistral один раз. Далее:
+A PDF must be sent to Mistral once. Then:
 
-- первые 20 страниц читаются через multimodal LLM по тому же документу;
-- остальные страницы читаются через текущий OCR API;
-- результаты объединяются в единый OCR payload до этапа нормализации.
+- the first 20 pages are read through the multimodal LLM over the same document;
+- the remaining pages are read through the current OCR API;
+- results are merged into a single OCR payload before the normalization stage.
 
 ### DJVU
 
-Для DJVU требуется один из двух совместимых подходов:
+DJVU requires one of two compatible approaches:
 
-1. Поддержка прямой загрузки DJVU в OCR API, если это разрешено внешним сервисом.
-2. Предварительная конвертация DJVU в PDF как отдельный этап пайплайна перед `upload_source`.
+1. Direct DJVU upload support in the OCR API, if allowed by the external service.
+2. Preliminary DJVU-to-PDF conversion as a separate pipeline stage before `upload_source`.
 
-Так как текущий код умеет работать только с одним входным файлом и не содержит конвертера, в реализации нужно
-заложить абстракцию `"SourcePreprocessor"` с ветками `"PdfSourcePreprocessor"` и `"DjvuSourcePreprocessor"`.
+Because the current code can only work with one input file and does not contain a converter, the implementation must include a `SourcePreprocessor` abstraction with `PdfSourcePreprocessor` and `DjvuSourcePreprocessor` branches.
 
 ## Content Assembly Rules
 
 ### Headers
 
-Header-блоки исключаются из итоговой книги полностью. Они могут сохраняться только в диагностических промежуточных
-данных, чтобы не терять информацию при анализе качества OCR.
+Header blocks are completely excluded from the final book. They may be stored only in diagnostic intermediate data so that information is not lost during OCR quality analysis.
 
 ### Body
 
-Body-контент страницы является единственным источником основного текста книги. Markdown разметка должна
-конвертироваться в HTML с сохранением:
+Page body content is the only source of the main book text. Markdown markup must be converted to HTML while preserving:
 
-- заголовков;
-- абзацев;
-- списков;
-- таблиц, если OCR их возвращает;
-- встроенных изображений.
+- headings;
+- paragraphs;
+- lists;
+- tables, if OCR returns them;
+- embedded images.
 
 ### Footers and Endnotes
 
-Для reflowable EPUB предпочтителен перенос footer-сносок в конец книги как endnotes, а не попытка сохранить их как
-постраничные footnotes, потому что EPUB не сохраняет понятие исходной страницы как стабильной визуальной
-единицы. Поэтому выбранный дизайн:
+For a reflowable EPUB, moving footer footnotes to the end of the book as endnotes is preferable to trying to preserve them as per-page footnotes, because EPUB does not preserve the concept of an original page as a stable visual unit. Therefore, the chosen design is:
 
-- footer не включается в поток текста страницы;
-- каждая сноска получает глобальный порядковый идентификатор;
-- в body вставляется якорь-ссылка на endnote там, где обнаружен маркер сноски;
-- в разделе endnotes формируется список примечаний в порядке появления;
-- каждая запись endnote содержит backlink к месту вызова, если сопоставление удалось;
-- несопоставленные footer-записи добавляются в конец раздела как несвязанные примечания.
+- footer is not included in the page text flow;
+- each footnote receives a global sequential identifier;
+- an anchor link to the endnote is inserted into the body where a footnote marker is detected;
+- the endnotes section contains a list of notes in order of appearance;
+- each endnote entry contains a backlink to the call site if matching succeeded;
+- unmatched footer entries are added to the end of the section as unlinked notes.
 
-Это решение лучше переносится в электронные читалки, чем попытка сохранять исходную пагинацию.
+This solution transfers better to e-readers than attempting to preserve the original pagination.
 
 ### Images
 
-Изображения извлекаются из OCR-ответа, записываются в `images/` и затем встраиваются в HTML/ebook-пакет через
-относительные ссылки. Если OCR markdown уже содержит image placeholders, они заменяются на ссылки на локальные файлы.
+Images are extracted from the OCR response, written to `images/`, and then embedded into the HTML/ebook package through relative links. If the OCR markdown already contains image placeholders, they are replaced with links to local files.
 
-Приоритет для изображений:
+Image priorities:
 
-1. сохранить сам файл;
-2. сохранить размер и координаты, если они нужны для адаптивной верстки;
-3. встроить изображение рядом с соответствующим body-блоком.
+1. save the file itself;
+2. save dimensions and coordinates if they are needed for adaptive layout;
+3. embed the image near the corresponding body block.
 
 ## Book Packaging
 
-Рекомендуемая схема сборки:
+Recommended assembly flow:
 
-1. Нормализованный markdown/HTML собирается в единую HTML-книгу.
-2. Формируются endnotes и навигационные якоря.
-3. Создаются служебные ebook-файлы пакета, необходимые выбранному инструменту сборки.
-4. HTML, служебные файлы и изображения упаковываются в EPUB.
+1. Normalized markdown/HTML is assembled into a single HTML book.
+2. Endnotes and navigation anchors are generated.
+3. Service ebook package files required by the selected build tool are created.
+4. HTML, service files, and images are packaged into EPUB.
 
-Так как текущая реализация останавливается на HTML, пакетирование нужно выделить в отдельный модуль, например
-`"book_packager.py"`, чтобы логика OCR и логика ebook-сборки были изолированы.
+Because the current implementation stops at HTML, packaging must be extracted into a separate module, for example `book_packager.py`, so that OCR logic and ebook assembly logic remain isolated.
 
 ## State Management and Resume
 
-`state.json` должен хранить:
+`state.json` must store:
 
-- путь к исходному файлу;
-- фактический нормализованный формат источника;
-- текущий этап;
-- `file_id` или эквивалентный идентификатор внешнего OCR-ресурса;
-- пути к артефактам;
-- ошибки и предупреждения последнего шага.
+- path to the source file;
+- actual normalized source format;
+- current stage;
+- `file_id` or an equivalent identifier of the external OCR resource;
+- artifact paths;
+- errors and warnings from the last step.
 
-Возобновление работы должно опираться на наличие уже готовых артефактов, а не повторять этапы без необходимости.
+Resuming work must rely on already prepared artifacts instead of repeating stages unnecessarily.
 
 ## Error Handling
 
-Ошибки делятся на:
+Errors are divided into:
 
-- ошибки валидации ввода;
-- ошибки OCR API;
-- ошибки декодирования изображений;
-- ошибки построения итоговой книги;
-- ошибки файловой системы.
+- input validation errors;
+- OCR API errors;
+- image decoding errors;
+- final book construction errors;
+- file system errors.
 
-Для каждого класса ошибок система должна:
+For each error class, the system must:
 
-- завершать текущий этап с понятным сообщением;
-- сохранять диагностические артефакты;
-- не удалять job directory автоматически при сбое.
+- terminate the current stage with a clear message;
+- save diagnostic artifacts;
+- not delete the job directory automatically on failure.
 
 ## Test Strategy
 
 ### Unit Tests
 
-- `tests/unit/test_input_validation.py` - проверяет валидацию входного формата и путей.
-- `tests/unit/test_job_state.py` - проверяет сохранение и загрузку состояния пайплайна.
-- `tests/unit/test_ocr_client.py` - проверяет merge гибридного OCR и разбор LLM JSON.
-- `tests/unit/test_page_normalization.py` - проверяет выделение body, header, footer.
-- `tests/unit/test_endnotes.py` - проверяет перенос сносок и генерацию ссылок.
-- `tests/unit/test_image_extraction.py` - проверяет декодирование и сохранение изображений.
-- `tests/unit/test_html_builder.py` - проверяет сборку HTML из нормализованной модели страниц.
-- `tests/unit/test_epub_packager.py` - проверяет формирование пакета для итоговой книги.
+- `tests/unit/test_input_validation.py` - verifies input format and path validation.
+- `tests/unit/test_job_state.py` - verifies pipeline state saving and loading.
+- `tests/unit/test_ocr_client.py` - verifies hybrid OCR merging and LLM JSON parsing.
+- `tests/unit/test_page_normalization.py` - verifies body, header, and footer extraction.
+- `tests/unit/test_endnotes.py` - verifies footnote movement and link generation.
+- `tests/unit/test_image_extraction.py` - verifies image decoding and saving.
+- `tests/unit/test_html_builder.py` - verifies HTML assembly from the normalized page model.
+- `tests/unit/test_epub_packager.py` - verifies package generation for the final book.
 
 ### Functional Tests
 
-- `tests/functional/test_cli_conversion.py` - запускает CLI на fixture OCR-ответа и проверяет итоговые артефакты.
-- `tests/functional/test_resume_pipeline.py` - проверяет дозапуск с середины пайплайна.
-- `tests/functional/test_endnotes_generation.py` - проверяет поведение сносок в итоговой книге.
-- `tests/functional/test_fixture_loading.py` - подтверждает работу без сетевого вызова.
+- `tests/functional/test_cli_conversion.py` - runs the CLI on a fixture OCR response and verifies final artifacts.
+- `tests/functional/test_resume_pipeline.py` - verifies resuming from the middle of the pipeline.
+- `tests/functional/test_endnotes_generation.py` - verifies footnote behavior in the final book.
+- `tests/functional/test_fixture_loading.py` - confirms operation without a network call.
 
 ### Hybrid OCR Strategy
 
-Гибридный OCR должен быть реализован в отдельном адаптере поверх Mistral SDK.
+Hybrid OCR must be implemented in a separate adapter on top of the Mistral SDK.
 
-- `"HybridMistralOcrClient"` или эквивалентный компонент загружает документ один раз;
-- multimodal LLM получает документ и возвращает OCR-подобный JSON только для первых 20 страниц;
-- OCR API получает тот же документ и возвращает полный OCR payload;
-- страницы 1-20 из OCR payload заменяются результатом LLM, а страницы 21+ остаются из OCR API;
-- итоговая структура должна совпадать с текущим внутренним форматом `"normalize_ocr_response"`, чтобы downstream-этапы
-  не различали источник страницы.
+- `HybridMistralOcrClient` or an equivalent component uploads the document once;
+- the multimodal LLM receives the document and returns OCR-like JSON only for the first 20 pages;
+- the OCR API receives the same document and returns the full OCR payload;
+- pages 1-20 from the OCR payload are replaced with the LLM result, while pages 21+ remain from the OCR API;
+- the final structure must match the current internal `normalize_ocr_response` format so that downstream stages do not distinguish the source of a page.
 
-Такой merge-подход проще, чем физическое разрезание PDF по страницам, и не требует дополнительного PDF tooling на
-первом этапе реализации.
+This merge approach is simpler than physically splitting the PDF into pages and does not require additional PDF tooling in the first implementation phase.
 
 ### OCR Test Fixture Strategy
 
-Тестовая книга берется из `tests/assets/`. Для нее должен существовать один сохраненный OCR fixture, полученный
-однократным реальным вызовом "MistralOCR". Далее:
+The test book is taken from `tests/assets/`. There must be one saved OCR fixture for it, obtained by a single real `MistralOCR` call. Then:
 
-- fixture хранится в репозитории или в согласованном кэш-каталоге тестов;
-- unit и functional tests используют fixture по умолчанию;
-- live OCR test не запускается автоматически в обычном `pytest`;
-- отдельный подготовительный сценарий может регенерировать fixture вручную.
+- the fixture is stored in the repository or in an agreed test cache directory;
+- unit and functional tests use the fixture by default;
+- the live OCR test is not run automatically during regular `pytest`;
+- a separate preparation scenario may regenerate the fixture manually.
 
-Это исключает нестабильность тестов, лишние сетевые вызовы и стоимость повторной OCR-обработки.
+This eliminates test instability, unnecessary network calls, and the cost of repeated OCR processing.
 
 ### Requirements Coverage
 

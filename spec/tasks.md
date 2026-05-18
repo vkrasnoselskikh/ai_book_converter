@@ -2,7 +2,7 @@
 
 ## Overview
 
-Спецификация описывает переход от текущего прототипа OCR-пайплайна к CLI-утилите для сборки книги в формате EPUB.
+The specification describes the transition from the current OCR pipeline prototype to a CLI utility for assembling a book in EPUB format.
 
 **Current status:** Phase 3 - Core Refactor and Fixture-Based Pipeline
 
@@ -10,10 +10,10 @@
 
 ## CRITICAL RULES
 
-- Не выполнять повторный live OCR-вызов в обычных тестах.
-- Не терять footer-сноски при сборке книги.
-- Не смешивать OCR-логику и упаковку электронной книги в один неразделимый модуль.
-- Не удалять временные артефакты автоматически при ошибке пайплайна.
+- Do not perform repeated live OCR calls in regular tests.
+- Do not lose footer footnotes during book assembly.
+- Do not mix OCR logic and ebook packaging into one indivisible module.
+- Do not automatically delete temporary artifacts when the pipeline fails.
 
 ---
 
@@ -21,66 +21,66 @@
 
 ### Completed
 
-- ✅ Проанализирован текущий код в `"pdf_ocr.py"` и зафиксировано текущее поведение: PDF upload, OCR request, JSON, images, HTML.
-- ✅ Зафиксирована целевая спецификация для CLI, OCR job directory, footnotes/endnotes и EPUB-сборки.
-- ✅ Определена стратегия тестирования через один сохраненный OCR fixture из `tests/assets`.
-- ✅ Создан новый пакет `"src/ai_book_converter"` и перенесен туда основной рабочий код.
-- ✅ Реализованы CLI, управление job directory, сохранение состояния и offline OCR fixture client.
-- ✅ Реализованы извлечение изображений, нормализация страниц, исключение header и перенос footer в endnotes.
-- ✅ Старый live test заменен на unit и functional tests без обязательного сетевого вызова.
-- ✅ Реализован базовый EPUB-экспорт с упаковкой `mimetype`, `container.xml`, `content.opf`, `toc.ncx`, XHTML-контента и изображений.
-- ✅ Добавлены unit и functional tests на сборку EPUB.
-- ✅ Получен реальный OCR fixture из книги в `tests/assets` и тесты адаптированы под фактическую структуру ответа Mistral OCR.
-- ✅ Реализован гибридный OCR: первые 20 страниц при live-запуске заменяются результатом multimodal LLM поверх базового OCR payload.
+- ✅ The current code in `pdf_ocr.py` has been analyzed and the current behavior has been documented: PDF upload, OCR request, JSON, images, HTML.
+- ✅ The target specification for CLI, OCR job directory, footnotes/endnotes, and EPUB assembly has been documented.
+- ✅ The testing strategy using one saved OCR fixture from `tests/assets` has been defined.
+- ✅ A new `src/ai_book_converter` package has been created and the main working code has been moved there.
+- ✅ CLI, job directory management, state persistence, and offline OCR fixture client have been implemented.
+- ✅ Image extraction, page normalization, header exclusion, and moving footer content to endnotes have been implemented.
+- ✅ The old live test has been replaced with unit and functional tests without a required network call.
+- ✅ Basic EPUB export has been implemented with packaging of `mimetype`, `container.xml`, `content.opf`, `toc.ncx`, XHTML content, and images.
+- ✅ Unit and functional tests for EPUB assembly have been added.
+- ✅ A real OCR fixture has been obtained from the book in `tests/assets`, and tests have been adapted to the actual Mistral OCR response structure.
+- ✅ Hybrid OCR has been implemented: during a live run, the first 20 pages are replaced with the multimodal LLM result on top of the base OCR payload.
 
 ### In Progress
 
-- 🔄 Доработка EPUB-навигации, совместимости с реальными ридерами и resume-сценариев пайплайна.
+- 🔄 Refining EPUB navigation, compatibility with real e-readers, and pipeline resume scenarios.
 
 ### Planned
 
 #### Phase 2: Core Refactor
 
-- [x] Выделить доменные сущности OCR-страницы, изображения и примечания.
-- [x] Разделить пайплайн на явные этапы с сохранением состояния.
-- [x] Вынести работу с OCR API в отдельный клиент/адаптер.
-- [x] Подготовить структуру job directory по спецификации.
+- [x] Extract domain entities for OCR pages, images, and notes.
+- [x] Split the pipeline into explicit stages with state persistence.
+- [x] Move OCR API work into a separate client/adapter.
+- [x] Prepare the job directory structure according to the specification.
 
 #### Phase 3: Content Processing
 
-- [x] Реализовать нормализацию OCR-ответа.
-- [x] Реализовать исключение header-блоков.
-- [x] Реализовать перенос body-блоков в основной поток книги.
-- [x] Реализовать извлечение footer-блоков в endnotes.
-- [x] Реализовать сопоставление ссылок на сноски между body и endnotes.
-- [ ] Реализовать безопасную обработку несопоставленных сносок.
-- [x] Реализовать сохранение и встраивание изображений.
+- [x] Implement OCR response normalization.
+- [x] Implement header block exclusion.
+- [x] Implement moving body blocks into the main book flow.
+- [x] Implement footer block extraction into endnotes.
+- [x] Implement matching footnote links between body and endnotes.
+- [ ] Implement safe handling of unmatched footnotes.
+- [x] Implement image saving and embedding.
 
 #### Phase 4: Output Packaging
 
-- [x] Реализовать сборку промежуточного HTML-контента книги.
-- [x] Реализовать генерацию навигации и служебных файлов ebook-пакета.
-- [x] Реализовать экспорт итоговой книги в EPUB.
-- [ ] Проверить совместимость выходной книги с электронными читалками.
+- [x] Implement assembly of intermediate HTML book content.
+- [x] Implement navigation and service ebook package file generation.
+- [x] Implement final book export to EPUB.
+- [ ] Verify compatibility of the output book with e-readers.
 
 #### Phase 5: Input Coverage
 
-- [x] Реализовать поддержку PDF как базового формата.
-- [ ] Спроектировать и реализовать поддержку DJVU через прямую загрузку или конвертацию в PDF.
-- [x] Добавить валидацию неподдерживаемых форматов.
+- [x] Implement PDF support as the base format.
+- [ ] Design and implement DJVU support through direct upload or conversion to PDF.
+- [x] Add validation for unsupported formats.
 
 #### Phase 6: Testing
 
-- [x] Один раз получить реальный OCR JSON для книги из `tests/assets`.
-- [x] Сохранить fixture и механизм его загрузки в тестах.
-- [x] Переписать текущий live test на mocked/fixture-based сценарии.
-- [x] Добавить unit tests для всех ключевых функций.
-- [x] Добавить unit tests для гибридного OCR merge и LLM-подмены первых 20 страниц.
-- [ ] Добавить functional tests для CLI, resume и сборки endnotes.
+- [x] Obtain real OCR JSON once for the book from `tests/assets`.
+- [x] Save the fixture and its loading mechanism in tests.
+- [x] Rewrite the current live test into mocked/fixture-based scenarios.
+- [x] Add unit tests for all key functions.
+- [x] Add unit tests for hybrid OCR merge and LLM replacement of the first 20 pages.
+- [ ] Add functional tests for CLI, resume, and endnotes assembly.
 
 #### Phase 7: Hardening
 
-- [ ] Добавить диагностические сообщения и журналирование по этапам.
-- [ ] Добавить устойчивую обработку ошибок OCR, изображений и файловой системы.
-- [ ] Проверить идемпотентность повторного запуска по `state.json`.
-- [ ] Провести полную валидацию линтинга, типов и тестового покрытия.
+- [ ] Add diagnostic messages and stage-by-stage logging.
+- [ ] Add robust handling of OCR, image, and file system errors.
+- [ ] Verify idempotency of reruns based on `state.json`.
+- [ ] Perform full validation of linting, typing, and test coverage.
