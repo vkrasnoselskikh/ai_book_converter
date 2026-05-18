@@ -30,79 +30,52 @@ Also make sure that the environment variables from `.env.example` are present or
 ---
 
 ## 2. Mandatory Workflow
+## 1. Spec-driven Workflow
 
-Perform every task step by step.
-
-### Step 1: Gather Context
+### Context Gathering & planning
 
 1. Get the list of specifications in `specs/`
-2. Identify the relevant specifications
+2. Determine relevant specifications
 3. For each relevant specification, read:
-    - `requirements.md`
-    - `design.md`
-    - `tasks.md` (if present)
-4. Study the related code
-5. Study the existing tests
+   - `requirements.md`
+   - `design.md`
+   - `tasks.md` (if exists)
+4. Search for related code
+5. Search for existing tests
+6. Create a plan for:
+   1. specification changes 
+   2. code file changes 
+   3. list of tests to verify functionality
 
-### Step 2: Plan
+To do this, perform all necessary diagnostics for plan creation: run tests / execute relevant code.
 
-Create a plan and **get user confirmation** before making changes.
 
-**Prohibition:** before the plan is confirmed, do not change code, tests, or documentation.
+### Before Completing Any Task
 
-Readiness checklist:
-
-- Plan confirmed: yes/no
-
-```
-Action plan:
-1. Change file X — add function Y
-2. Add test Z to verify Y
-3. Update tasks.md (if used)
-4. Run validation
-
-Expected result: [description]
-Risks: [if any]
-```
-
-### Step 3: Implementation
-
-- Execute the plan step by step
-- After significant changes, run the relevant unit tests
-- Add requirement comments to code
-- Write tests using the required structure (see section 6)
-- **Prohibition:** do not remove or change behavior from requirements without user confirmation
-
-### Step 4: Completion
-
-1. Verify that specifications are complete, consistent, and up to date
-2. Verify that the code matches the requirements and design
+1. Verify that specifications are complete, consistent, and up-to-date
+2. Verify code matches requirements and design
 3. Run:
-```shell
+
+```bash
 make lint
-make test 
+make test
 ```
-4. Make sure all checks passed:
-    - ✅ Ruff check
-    - ✅ Ruff format
-    - ✅ ty check
-    - ✅ Pytest with coverage
 
-### Step 5: Report
+4. Ensure all checks pass:
+   - ✅ Ruff check
+   - ✅ Ruff format
+   - ✅ ty check
+   - ✅ Pytest
 
-Provide a short report in the message (without creating separate files):
+### Report
 
-```
+Provide a short report in the message, without creating separate files:
+
+```text
 Task completed.
 
 Implemented:
 - [item 1]
-
-Changed files:
-- [file 1]
-
-Added/updated tests:
-- [test 1]
 
 Remaining:
 - [item 1] (if any)
@@ -175,7 +148,7 @@ Rules:
 
 - ID: `<feature-id>.<group>.<item>`
 - Every User Story must have a tests section
-- Language: Russian
+- Language: English
 - Acceptance criteria must use the EARS format
 
 ---
