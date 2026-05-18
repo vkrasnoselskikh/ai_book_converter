@@ -29,8 +29,7 @@ Also make sure that the environment variables from `.env.example` are present or
 
 ---
 
-## 2. Mandatory Workflow
-## 1. Spec-driven Workflow
+## 2. Spec-driven Workflow
 
 ### Context Gathering & planning
 

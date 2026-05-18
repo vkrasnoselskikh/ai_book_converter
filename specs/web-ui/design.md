@@ -13,6 +13,10 @@ The current Python logic from "src/ai_book_converter" is ported only where it is
 Main components:
 
 - "AppShell" - the shared page layout, header bar, and footer.
+- "HeaderBar" - the top application header with left and right layout areas.
+- "BrandBlock" - application icon and "AI Book converter" title.
+- "CurrentBookSelector" - current book selector block, for example "Book: Andrey Karpathy - AI Agents".
+- "ProfileMenuButton" - profile icon button and dropdown menu for profile settings.
 - "BookUploadPanel" - EPUB and DJVU upload, submit state, and format errors.
 - "BookMetadataPanel" - metadata display and editing.
 - "BookCoverEditor" - current cover preview and replacement upload.
@@ -21,11 +25,22 @@ Main components:
 
 Styling uses daisyUI version > "5.5.19" through CSS. The day theme must use "emerald", and the night theme must use "forest". Theme switching must be implemented through the theme attribute on the root HTML element or an equivalent daisyUI mechanism.
 
+The header layout must have three visual blocks:
+
+- left brand block with icon and "AI Book converter";
+- left current book selector block showing the selected book label;
+- right profile icon button.
+
+The profile icon button must open a dropdown menu for profile settings. The header must keep stable spacing when the current book is absent, processing, failed, or ready.
+
 ## Server Architecture
 
 The backend is implemented with Node.js and TypeScript. It is responsible for:
 
 - server-side rendering of the React first screen;
+- anonymous session creation and lookup;
+- external authentication callback handling;
+- linking anonymous session work to authenticated accounts;
 - book upload routes;
 - metadata read and update routes;
 - cover replacement routes;
@@ -39,13 +54,21 @@ Recommended server modules:
 - "server.ts" - HTTP server startup.
 - "ssr/renderApp.tsx" - React server-side rendering.
 - "routes/bookRoutes.ts" - book routes.
+- "routes/authRoutes.ts" - Google, Facebook, and Telegram authentication routes.
+- "routes/sessionRoutes.ts" - current session state routes when needed by the client.
 - "routes/metadataRoutes.ts" - metadata routes.
 - "routes/coverRoutes.ts" - cover routes.
 - "config/appConfig.ts" - application configuration.
 - "database/dataSource.ts" - TypeORM setup.
 - "repositories/*Repository.ts" - Data Mapper repositories.
+- "services/sessionService.ts" - anonymous session creation and validation.
+- "services/authService.ts" - external identity resolution and account creation.
+- "services/accountLinkingService.ts" - anonymous session to account merge.
 - "services/bookStorageService.ts" - book file storage.
 - "services/bookProcessingService.ts" - book processing orchestration.
+- "services/mistralOcrService.ts" - Mistral OCR request and page anchor enrichment.
+- "services/metadataAgentService.ts" - metadata extraction agent based on the first three pages.
+- "services/tableOfContentsAgentService.ts" - table of contents agent based on pages 3 through 10.
 - "services/bookPreviewService.ts" - preview data preparation.
 
 ## Routing
@@ -53,6 +76,14 @@ Recommended server modules:
 Minimum HTTP route set:
 
 - "GET /" - SSR home page.
+- "GET /books/:bookId" - SSR book workspace for upload processing, processing status, metadata editing, cover editing, and preview.
+- "GET /api/session" - return the current anonymous or authenticated access context.
+- "GET /api/auth/google/start" - start Google authentication when configured.
+- "GET /api/auth/google/callback" - handle Google authentication callback when configured.
+- "GET /api/auth/facebook/start" - start Facebook authentication when configured.
+- "GET /api/auth/facebook/callback" - handle Facebook authentication callback when configured.
+- "GET /api/auth/telegram/start" - start Telegram authentication when configured.
+- "GET /api/auth/telegram/callback" - handle Telegram authentication callback when configured.
 - "POST /api/books" - upload EPUB or DJVU and create a book.
 - "GET /api/books/:bookId" - get book, status, and metadata.
 - "PATCH /api/books/:bookId/metadata" - update metadata.
@@ -62,18 +93,46 @@ Minimum HTTP route set:
 
 Routes must return structured errors without exposing internal paths, secrets, or stack traces.
 
+The canonical book processing URL must use the "GET /books/:bookId" route. After "POST /api/books" succeeds, the API response must include the created "bookId" and "bookUrl"; the hydrated client must update the address bar to "bookUrl" without waiting for background processing to finish.
+
 ## Data Model
 
 All identifiers are UUIDs.
+
+### "AnonymousSession"
+
+Fields:
+
+- "id: uuid"
+- "mergedIntoUserId: uuid | null"
+- "createdAt: Date"
+- "lastSeenAt: Date"
+- "expiresAt: Date | null"
+
+The anonymous session identifier is issued before authentication and must be persisted in a secure HTTP-only session cookie or an equivalent server-controlled mechanism. A session that has been merged into a user account must remain resolvable long enough to avoid losing in-flight browser actions.
 
 ### "User"
 
 Fields:
 
 - "id: uuid"
-- "displayName: string"
+- "displayName: string | null"
 - "createdAt: Date"
 - "updatedAt: Date"
+
+### "AuthIdentity"
+
+Fields:
+
+- "id: uuid"
+- "userId: uuid"
+- "provider: 'google' | 'facebook' | 'telegram'"
+- "providerSubject: string"
+- "displayName: string | null"
+- "createdAt: Date"
+- "updatedAt: Date"
+
+"AuthIdentity" must have a unique constraint on the "provider" and "providerSubject" pair.
 
 ### "Book"
 
@@ -97,13 +156,25 @@ Fields:
 - "title: string"
 - "authors: string[]"
 - "language: string"
+- "isbnNumbers: string[]"
 - "description: string | null"
+- "coverSubtitle: string | null"
 - "coverPath: string | null"
 - "toc: Json"
 - "createdAt: Date"
 - "updatedAt: Date"
 
 For SQLite, arrays and JSON must be stored through compatible TypeORM transformers or JSON columns with future Postgres migration in mind.
+
+### "PageAnchor"
+
+Fields:
+
+- "bookId: uuid"
+- "pageNumber: number"
+- "anchorId: string"
+
+Page anchors may be stored in preview JSON rather than a separate table if repository queries do not need to address anchors independently. The anchor format must be stable and based on the original one-based page number, for example "page-3".
 
 ### "UserBook"
 
@@ -117,6 +188,18 @@ Fields:
 
 "UserBook" must have a unique constraint on the "userId" and "bookId" pair.
 
+### "SessionBook"
+
+Fields:
+
+- "id: uuid"
+- "sessionId: uuid"
+- "bookId: uuid"
+- "role: 'owner' | 'reader'"
+- "createdAt: Date"
+
+"SessionBook" must have a unique constraint on the "sessionId" and "bookId" pair.
+
 ## Database Layer
 
 TypeORM must use the Data Mapper pattern:
@@ -127,6 +210,30 @@ TypeORM must use the Data Mapper pattern:
 - domain logic must not depend on SQLite-specific details.
 
 SQLite is used as the first driver. Configuration must be centralized in "config/appConfig.ts" and "database/dataSource.ts" so that the driver and connection settings can later be replaced with Postgres.
+
+Anonymous access and authenticated access must be represented by explicit repository operations. Services must not infer access by trusting a client-provided user identifier. For anonymous requests, repositories must resolve available books through "SessionBook". For authenticated requests, repositories must resolve available books through "UserBook".
+
+External authentication identities must be stored separately from "User" records so that one user account can later support several providers without changing the ownership model.
+
+## Session and Authentication Flow
+
+Anonymous-first flow:
+
+1. The user requests "GET /".
+2. The backend creates an "AnonymousSession" if the request does not already contain a valid session.
+3. The backend returns the first screen with the session context available to client hydration.
+4. Book upload, metadata editing, cover editing, and preview requests use the server-resolved anonymous session while the user is not authenticated.
+5. New books are linked through "SessionBook".
+
+Authentication flow:
+
+1. The user starts authentication with Google, Facebook, or Telegram.
+2. The provider callback returns an external provider subject.
+3. "AuthService" finds an existing "AuthIdentity" by provider and subject or creates a new "User" and "AuthIdentity".
+4. "AccountLinkingService" links all current "SessionBook" records to the resolved "User" by creating missing "UserBook" records.
+5. Duplicate "UserBook" records are ignored through the unique "userId" and "bookId" constraint.
+6. The authenticated user's book history is read through "UserBook".
+7. If account linking fails, the original "SessionBook" records remain intact and the user sees a diagnostic message.
 
 ## File Storage
 
@@ -151,6 +258,7 @@ Recommended book directory structure:
   preview/
     content.html
     pages.json
+    toc.json
   images/
     <image files>
   processing/
@@ -167,6 +275,9 @@ Logic from "src/ai_book_converter" is ported into TypeScript domain services:
 
 - "BookInputValidator" - validates EPUB and DJVU according to the web requirements.
 - "BookStorageService" - creates the book directory and saves artifacts.
+- "MistralOcrService" - sends the source document to Mistral OCR with the current Python live OCR behavior and adds page anchors to every recognized page.
+- "MetadataAgentService" - runs the metadata extraction agent through "@openai/agents".
+- "TableOfContentsAgentService" - runs the table-of-contents extraction agent through "@openai/agents".
 - "MetadataExtractionService" - reads or prepares metadata and cover data.
 - "ContentNormalizationService" - normalizes pages, blocks, tables, images, and warnings.
 - "EndnoteService" - moves footer notes into readable form and preserves unmatched notes.
@@ -179,6 +290,7 @@ Portable rules from the current Python code:
 - image structure from "PageImage";
 - table structure from "PageTable";
 - metadata structure from "BookMetadata";
+- page anchor structure tied to original page numbers;
 - saving images from base64;
 - removing headers and footers from the main text;
 - normalizing fenced code blocks for Python-like code;
@@ -186,6 +298,47 @@ Portable rules from the current Python code:
 - replacing table and image placeholders before HTML rendering.
 
 Python CLI rules, CLI temporary directories, and final EPUB publication are not mandatory for the first web screen unless a separate task requires them.
+
+## OCR and LLM Extraction Flow
+
+Mistral OCR flow:
+
+1. "MistralOcrService" uploads the source EPUB or DJVU-derived document to Mistral using the TypeScript implementation of the current Python live OCR behavior.
+2. The OCR request must include image base64 extraction, table HTML extraction, header extraction, and footer extraction where supported by the selected Mistral OCR client.
+3. The service normalizes every OCR page into an internal page object with both zero-based "pageIndex" and one-based "pageNumber".
+4. The service assigns "anchorId" to every page using the stable "page-<pageNumber>" format.
+5. Preview rendering writes the anchor into the page HTML so links can target the original page position.
+
+Metadata agent flow:
+
+1. "MetadataAgentService" uses "@openai/agents" for agent orchestration.
+2. The agent model must be backed by Mistral Chat Completions through a provider adapter compatible with the Agents SDK.
+3. The agent receives only the first three recognized book pages as input.
+4. The agent returns a structured "BookMetadataAgentResult" object:
+
+```ts
+type BookMetadataAgentResult = {
+  title: string;
+  authors: string[];
+  isbn_numbers: string[];
+  language: string;
+  cover_subtitle: string | null;
+  cover_image: string;
+};
+```
+
+The "language" field defaults to "en" when the agent cannot detect a language. The "cover_image" field contains a base64 image payload. "MetadataExtractionService" must save this image through "BookStorageService" and store the resulting path in "BookMetadata.coverPath"; it must not keep large base64 image data as the primary persisted cover reference.
+
+Table-of-contents agent flow:
+
+1. "TableOfContentsAgentService" uses "@openai/agents" for agent orchestration.
+2. The agent model must be backed by Mistral Chat Completions through a provider adapter compatible with the Agents SDK.
+3. The agent receives recognized pages 3 through 10 as input, using original one-based page numbers.
+4. The agent returns structured entries with section title, nesting level, and "anchorId".
+5. The agent must not return raw page numbers as user-facing navigation targets.
+6. "BookPreviewService" renders the table of contents as hyperlinks to page anchors.
+
+The exact provider adapter package may be selected during implementation, but the application code must keep the agent boundary explicit: prompt construction, model invocation, output parsing, and validation belong in the agent services rather than being scattered across routes.
 
 ## EPUB and DJVU Handling
 
@@ -207,12 +360,23 @@ The concrete EPUB/DJVU processing library must be selected during implementation
 ## SSR Flow
 
 1. The user requests "GET /".
-2. The backend creates the initial page state.
+2. The backend resolves or creates the anonymous session and creates the initial page state.
 3. "renderApp.tsx" generates HTML with the header bar, upload block, and footer.
 4. Client React loads and hydrates the markup.
 5. Subsequent actions run through the API without navigating to other pages.
 
 SSR must not require a selected book. The first screen must remain available even when the database fails, if a diagnostic state can be returned.
+
+Book URL flow:
+
+1. The user uploads a supported book through "POST /api/books".
+2. The backend creates the "Book" record, creates the current access link, starts or schedules processing, and returns "bookUrl".
+3. The client updates browser history to "bookUrl" immediately after upload success.
+4. If the user leaves the tab before processing completes, processing continues independently from the browser tab lifecycle.
+5. When the user later opens "GET /books/:bookId", the backend resolves the current anonymous session or authenticated user and verifies access through "SessionBook" or "UserBook".
+6. If the book is still processing, the book workspace shows the processing state and continues polling or subscribing through API calls.
+7. If the book is ready, the book workspace shows editable metadata, cover controls, and preview.
+8. If the book is failed, the book workspace shows the saved diagnostic status and keeps available editable data visible where possible.
 
 ## Error Handling
 
@@ -222,6 +386,9 @@ Errors are grouped as:
 - file storage errors;
 - EPUB/DJVU reading errors;
 - database errors;
+- session creation or lookup errors;
+- external authentication errors;
+- session-to-account linking errors;
 - SSR errors;
 - client hydration errors;
 - metadata or cover save errors.
@@ -239,36 +406,58 @@ Each error must have:
 
 - `apps/web-ui/tests/unit/test_book_input_validator.ts` - verifies EPUB/DJVU support and rejection of other formats.
 - `apps/web-ui/tests/unit/test_book_storage_service.ts` - verifies `AI_BOOK_COVERTER_BOOKS_PATH/<book_id>` and file saving.
-- `apps/web-ui/tests/unit/test_entities.ts` - verifies UUIDs, links, and entity constraints.
+- `apps/web-ui/tests/unit/test_entities.ts` - verifies UUIDs, sessions, identities, links, and entity constraints.
+- `apps/web-ui/tests/unit/test_session_service.ts` - verifies anonymous session creation and reuse.
+- `apps/web-ui/tests/unit/test_auth_service.ts` - verifies external identity lookup and user creation.
+- `apps/web-ui/tests/unit/test_account_linking_service.ts` - verifies session books are linked to new and existing accounts.
+- `apps/web-ui/tests/unit/test_mistral_ocr_service.ts` - verifies OCR payload normalization and page anchor creation.
+- `apps/web-ui/tests/unit/test_metadata_agent_service.ts` - verifies first-three-pages metadata extraction and result validation.
+- `apps/web-ui/tests/unit/test_table_of_contents_agent_service.ts` - verifies pages 3 through 10 produce anchor-based entries.
 - `apps/web-ui/tests/unit/test_metadata_service.ts` - verifies metadata reading and updating.
 - `apps/web-ui/tests/unit/test_cover_service.ts` - verifies cover replacement.
 - `apps/web-ui/tests/unit/test_content_normalization_service.ts` - verifies portable normalization rules.
 - `apps/web-ui/tests/unit/test_endnote_service.ts` - verifies footnotes and unmatched footnotes.
 - `apps/web-ui/tests/unit/test_preview_render_service.ts` - verifies HTML preview.
 - `apps/web-ui/tests/unit/test_ssr.tsx` - verifies first-screen server-side rendering.
+- `apps/web-ui/tests/unit/test_book_url_builder.ts` - verifies canonical book processing URLs.
+- `apps/web-ui/tests/unit/test_header_state.tsx` - verifies header state for empty and selected books.
 
 ### Functional Tests
 
 - `apps/web-ui/tests/functional/test_home_page.ts` - verifies the main SPA blocks.
+- `apps/web-ui/tests/functional/test_header_layout.ts` - verifies the header brand, current book selector, and profile dropdown.
 - `apps/web-ui/tests/functional/test_theme_modes.ts` - verifies the "emerald" and "forest" themes.
+- `apps/web-ui/tests/functional/test_anonymous_session.ts` - verifies first-visit session creation and reuse.
 - `apps/web-ui/tests/functional/test_book_upload.ts` - verifies EPUB/DJVU upload.
+- `apps/web-ui/tests/functional/test_book_processing_url.ts` - verifies address bar update after upload.
+- `apps/web-ui/tests/functional/test_book_processing_resume.ts` - verifies returning to a book processing URL restores status or editing.
 - `apps/web-ui/tests/functional/test_book_metadata.ts` - verifies metadata display and saving.
+- `apps/web-ui/tests/functional/test_metadata_agent.ts` - verifies metadata agent extraction from the first three pages.
 - `apps/web-ui/tests/functional/test_cover_editing.ts` - verifies cover replacement.
 - `apps/web-ui/tests/functional/test_book_reader.ts` - verifies book preview.
-- `apps/web-ui/tests/functional/test_user_books.ts` - verifies current-user book access.
+- `apps/web-ui/tests/functional/test_ocr_page_anchors.ts` - verifies OCR pages receive preview anchors.
+- `apps/web-ui/tests/functional/test_table_of_contents.ts` - verifies table of contents links to page anchors.
+- `apps/web-ui/tests/functional/test_toc_agent.ts` - verifies table of contents extraction from pages 3 through 10.
+- `apps/web-ui/tests/functional/test_anonymous_books.ts` - verifies current anonymous session book access.
+- `apps/web-ui/tests/functional/test_user_books.ts` - verifies authenticated user book access.
 - `apps/web-ui/tests/functional/test_shared_books.ts` - verifies linking one book to several users.
+- `apps/web-ui/tests/functional/test_auth_providers.ts` - verifies Google, Facebook, and Telegram authentication entry points when configured.
+- `apps/web-ui/tests/functional/test_session_account_linking.ts` - verifies linking anonymous books to a new or existing user after authentication.
+- `apps/web-ui/tests/functional/test_authenticated_history.ts` - verifies authenticated processing history.
 - `apps/web-ui/tests/functional/test_book_file_storage.ts` - verifies book artifact storage.
 - `apps/web-ui/tests/functional/test_ssr_rendering.ts` - verifies first-screen HTML from the server.
+- `apps/web-ui/tests/functional/test_book_url_ssr.ts` - verifies server-rendered book workspace from a processing URL.
 
 ### Requirements Coverage
 
 | Requirement | Unit Tests | Functional Tests |
 |-------------|------------|-------------------|
-| web-ui.1 | `apps/web-ui/tests/unit/test_ssr.tsx` | `apps/web-ui/tests/functional/test_home_page.ts`, `apps/web-ui/tests/functional/test_theme_modes.ts` |
-| web-ui.2 | `apps/web-ui/tests/unit/test_book_input_validator.ts` | `apps/web-ui/tests/functional/test_book_upload.ts`, `apps/web-ui/tests/functional/test_upload_validation.ts` |
-| web-ui.3 | `apps/web-ui/tests/unit/test_metadata_service.ts`, `apps/web-ui/tests/unit/test_cover_service.ts` | `apps/web-ui/tests/functional/test_book_metadata.ts`, `apps/web-ui/tests/functional/test_cover_editing.ts` |
-| web-ui.4 | `apps/web-ui/tests/unit/test_preview_render_service.ts`, `apps/web-ui/tests/unit/test_endnote_service.ts` | `apps/web-ui/tests/functional/test_book_reader.ts`, `apps/web-ui/tests/functional/test_book_processing_state.ts` |
-| web-ui.5 | `apps/web-ui/tests/unit/test_entities.ts` | `apps/web-ui/tests/functional/test_user_books.ts`, `apps/web-ui/tests/functional/test_shared_books.ts` |
+| web-ui.1 | `apps/web-ui/tests/unit/test_ssr.tsx`, `apps/web-ui/tests/unit/test_session_service.ts`, `apps/web-ui/tests/unit/test_header_state.tsx` | `apps/web-ui/tests/functional/test_home_page.ts`, `apps/web-ui/tests/functional/test_header_layout.ts`, `apps/web-ui/tests/functional/test_theme_modes.ts`, `apps/web-ui/tests/functional/test_anonymous_session.ts` |
+| web-ui.2 | `apps/web-ui/tests/unit/test_book_input_validator.ts`, `apps/web-ui/tests/unit/test_book_url_builder.ts` | `apps/web-ui/tests/functional/test_book_upload.ts`, `apps/web-ui/tests/functional/test_upload_validation.ts`, `apps/web-ui/tests/functional/test_book_processing_url.ts` |
+| web-ui.3 | `apps/web-ui/tests/unit/test_metadata_service.ts`, `apps/web-ui/tests/unit/test_metadata_agent_service.ts`, `apps/web-ui/tests/unit/test_cover_service.ts` | `apps/web-ui/tests/functional/test_book_metadata.ts`, `apps/web-ui/tests/functional/test_metadata_agent.ts`, `apps/web-ui/tests/functional/test_cover_editing.ts` |
+| web-ui.4 | `apps/web-ui/tests/unit/test_preview_render_service.ts`, `apps/web-ui/tests/unit/test_endnote_service.ts`, `apps/web-ui/tests/unit/test_table_of_contents_agent_service.ts` | `apps/web-ui/tests/functional/test_book_reader.ts`, `apps/web-ui/tests/functional/test_book_processing_state.ts`, `apps/web-ui/tests/functional/test_table_of_contents.ts`, `apps/web-ui/tests/functional/test_book_processing_resume.ts` |
+| web-ui.5 | `apps/web-ui/tests/unit/test_entities.ts`, `apps/web-ui/tests/unit/test_session_service.ts` | `apps/web-ui/tests/functional/test_anonymous_books.ts`, `apps/web-ui/tests/functional/test_user_books.ts`, `apps/web-ui/tests/functional/test_shared_books.ts` |
 | web-ui.6 | `apps/web-ui/tests/unit/test_book_storage_service.ts` | `apps/web-ui/tests/functional/test_book_file_storage.ts`, `apps/web-ui/tests/functional/test_book_storage_error.ts` |
-| web-ui.7 | `apps/web-ui/tests/unit/test_ssr.tsx` | `apps/web-ui/tests/functional/test_ssr_rendering.ts`, `apps/web-ui/tests/functional/test_client_hydration.ts` |
-| web-ui.8 | `apps/web-ui/tests/unit/test_content_normalization_service.ts`, `apps/web-ui/tests/unit/test_endnote_service.ts`, `apps/web-ui/tests/unit/test_preview_render_service.ts` | `apps/web-ui/tests/functional/test_converter_port.ts`, `apps/web-ui/tests/functional/test_partial_book_data.ts` |
+| web-ui.7 | `apps/web-ui/tests/unit/test_ssr.tsx`, `apps/web-ui/tests/unit/test_book_url_builder.ts` | `apps/web-ui/tests/functional/test_ssr_rendering.ts`, `apps/web-ui/tests/functional/test_client_hydration.ts`, `apps/web-ui/tests/functional/test_book_url_ssr.ts` |
+| web-ui.8 | `apps/web-ui/tests/unit/test_mistral_ocr_service.ts`, `apps/web-ui/tests/unit/test_content_normalization_service.ts`, `apps/web-ui/tests/unit/test_endnote_service.ts`, `apps/web-ui/tests/unit/test_preview_render_service.ts`, `apps/web-ui/tests/unit/test_table_of_contents_agent_service.ts` | `apps/web-ui/tests/functional/test_converter_port.ts`, `apps/web-ui/tests/functional/test_partial_book_data.ts`, `apps/web-ui/tests/functional/test_ocr_page_anchors.ts`, `apps/web-ui/tests/functional/test_toc_agent.ts` |
+| web-ui.9 | `apps/web-ui/tests/unit/test_auth_service.ts`, `apps/web-ui/tests/unit/test_account_linking_service.ts` | `apps/web-ui/tests/functional/test_auth_providers.ts`, `apps/web-ui/tests/functional/test_session_account_linking.ts`, `apps/web-ui/tests/functional/test_authenticated_history.ts` |
