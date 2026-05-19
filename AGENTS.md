@@ -463,16 +463,7 @@ Local logging without a unified handler is allowed only if it is explicitly desc
 
 ## 7. Documentation Rules
 
-### Language
-
-| File/content                           | Language |
-|----------------------------------------|----------|
-| requirements.md                        | Russian  |
-| design.md                              | Russian  |
-| tasks.md                               | Russian  |
-| Code comments                          | English  |
-| GitLab-based (issues/MR/review/commit) | English  |
-| File/variable names                    | English  |
+Language: English
 
 ### Naming
 
