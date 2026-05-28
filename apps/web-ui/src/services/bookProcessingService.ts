@@ -60,9 +60,134 @@ export class BookProcessingService {
       await this.processEpub(bookId, filePath);
     } else if (book.sourceFormat === "djvu") {
       await this.processDjvu(bookId, filePath);
+    } else if (book.sourceFormat === "pdf") {
+      await this.processPdf(bookId, filePath);
     } else {
       throw new Error(`Unsupported source format: ${book.sourceFormat}`);
     }
+  }
+
+  private async processPdf(bookId: string, filePath: string): Promise<void> {
+    logger.info(`Processing PDF bookId=${bookId}`);
+
+    // PDF is already a direct input for Mistral OCR (no conversion needed)
+    const bookDir = this.storageService.getBookDir(bookId);
+    this.storageService.ensureBookDir(bookId);
+    const coverDir = path.join(bookDir, "cover");
+    if (!fs.existsSync(coverDir)) fs.mkdirSync(coverDir, { recursive: true });
+
+    // 1. Process PDF directly via Mistral OCR
+    logger.info("Triggering Mistral OCR on PDF...");
+    const ocrPages = await this.ocrService.processDocument(filePath);
+
+    // 2. Save any extracted images to disk
+    logger.info("Saving OCR-extracted page images...");
+    // Try extracting cover from the first page
+    const targetCoverPath = path.join(coverDir, "cover.png");
+    for (const page of ocrPages) {
+      for (const img of page.images) {
+        if (img.imageBase64) {
+          const imgBuffer = Buffer.from(
+            img.imageBase64.split(",").pop() || "",
+            "base64",
+          );
+          this.storageService.writeFile(bookId, "images", img.id, imgBuffer);
+        }
+      }
+      // Save the first page as cover
+      if (page.images.length > 0 && !fs.existsSync(targetCoverPath)) {
+        const firstImg = page.images[0];
+        if (firstImg.imageBase64) {
+          const imgBuffer = Buffer.from(
+            firstImg.imageBase64.split(",").pop() || "",
+            "base64",
+          );
+          fs.writeFileSync(targetCoverPath, imgBuffer);
+        }
+      }
+    }
+
+    // 3. Extract metadata via AgentService
+    logger.info("Running Metadata Agent...");
+    const firstPagesText = ocrPages
+      .slice(0, 3)
+      .map((p) => p.markdown)
+      .join("\n\n");
+    const agentMetadata =
+      await this.agentService.extractMetadata(firstPagesText);
+
+    // 4. Extract Table of Contents via AgentService
+    logger.info("Running Table of Contents Agent...");
+    const tocAgentEntries = await this.agentService.extractTableOfContents(
+      ocrPages
+        .slice(2, 10)
+        .map((p) => ({ pageNumber: p.pageNumber, text: p.markdown })),
+    );
+
+    // 5. Normalize pages
+    logger.info("Normalizing OCR text and code blocks...");
+    const normalizedPages = ocrPages.map((page) => {
+      let cleanMarkdown = NormalizationService.stripBoundaryBlocks(
+        page.markdown,
+        page.headers,
+        page.footers,
+      );
+      cleanMarkdown = NormalizationService.normalizeCodeBlocks(cleanMarkdown);
+      return {
+        ...page,
+        markdown: cleanMarkdown,
+      };
+    });
+
+    // 6. Build endnotes
+    logger.info("Linking footnotes and constructing endnotes...");
+    const { rewrittenPages, endnotes } =
+      EndnoteService.buildEndnotes(normalizedPages);
+
+    // 7. Prepare preview representation
+    logger.info("Compiling preview markdown to HTML sections...");
+    const imagePrefix = `/api/books/${bookId}/files/images`;
+    const bodyHtml = PreviewRenderService.renderBodySections(
+      rewrittenPages,
+      imagePrefix,
+    );
+    const endnotesHtml = PreviewRenderService.renderEndnotesHtml(endnotes);
+    const fullHtml = PreviewRenderService.renderBookHtml(
+      bodyHtml,
+      endnotesHtml,
+    );
+
+    // Save final artifacts
+    this.storageService.writeFile(bookId, "preview", "content.html", fullHtml);
+    this.storageService.writeFile(
+      bookId,
+      "preview",
+      "pages.json",
+      JSON.stringify(rewrittenPages),
+    );
+    this.storageService.writeFile(
+      bookId,
+      "preview",
+      "toc.json",
+      JSON.stringify(tocAgentEntries),
+    );
+
+    // Save metadata record in DB
+    const finalCoverPath = fs.existsSync(targetCoverPath)
+      ? "cover/cover.png"
+      : null;
+    await this.bookRepository.saveMetadata(bookId, {
+      title: agentMetadata.title,
+      authors: agentMetadata.authors,
+      isbnNumbers: agentMetadata.isbn_numbers,
+      language: agentMetadata.language || "en",
+      coverSubtitle: agentMetadata.cover_subtitle,
+      coverPath: finalCoverPath,
+      toc: { entries: tocAgentEntries },
+    });
+
+    // Update book status to ready
+    await this.bookRepository.updateStatus(bookId, "ready");
   }
 
   private async processEpub(bookId: string, filePath: string): Promise<void> {

@@ -167,16 +167,23 @@ app.post("/api/books", upload.single("book"), async (req: any, res) => {
     .substring(originalname.lastIndexOf("."))
     .toLowerCase();
 
-  if (suffix !== ".epub" && suffix !== ".djvu") {
+  if (suffix !== ".epub" && suffix !== ".djvu" && suffix !== ".pdf") {
     fs.unlinkSync(tempPath);
     res.status(400).json({
-      error: "Unsupported file format. Only EPUB and DJVU are allowed.",
+      error: "Unsupported file format. Only EPUB, DJVU, and PDF are allowed.",
     });
     return;
   }
 
   try {
-    const sourceFormat = suffix === ".epub" ? "epub" : "djvu";
+    let sourceFormat: "epub" | "djvu" | "pdf";
+    if (suffix === ".epub") {
+      sourceFormat = "epub";
+    } else if (suffix === ".djvu") {
+      sourceFormat = "djvu";
+    } else {
+      sourceFormat = "pdf";
+    }
 
     // Create Book DB Record
     const book = await bookRepo.create(originalname, sourceFormat, "");

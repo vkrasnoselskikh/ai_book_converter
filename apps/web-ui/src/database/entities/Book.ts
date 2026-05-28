@@ -21,7 +21,7 @@ export class Book {
   originalFileName!: string;
 
   @Column({ type: "varchar" })
-  sourceFormat!: "epub" | "djvu";
+  sourceFormat!: "epub" | "djvu" | "pdf";
 
   @Column({ type: "varchar" })
   storagePath!: string;

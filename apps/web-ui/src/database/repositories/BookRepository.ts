@@ -18,7 +18,10 @@ export class BookRepository {
   }
 
   // Find book and verify anonymous session access
-  async findByIdAndSession(bookId: string, sessionId: string): Promise<Book | null> {
+  async findByIdAndSession(
+    bookId: string,
+    sessionId: string,
+  ): Promise<Book | null> {
     const link = await this.sessionBookRepo.findOne({
       where: { bookId, sessionId },
     });
@@ -41,7 +44,7 @@ export class BookRepository {
       where: { sessionId },
       relations: ["book", "book.metadata"],
     });
-    return links.map(l => l.book);
+    return links.map((l) => l.book);
   }
 
   // Find all books owned by a user
@@ -50,11 +53,15 @@ export class BookRepository {
       where: { userId },
       relations: ["book", "book.metadata"],
     });
-    return links.map(l => l.book);
+    return links.map((l) => l.book);
   }
 
   // Create a new book
-  async create(originalFileName: string, sourceFormat: "epub" | "djvu", storagePath: string): Promise<Book> {
+  async create(
+    originalFileName: string,
+    sourceFormat: "epub" | "djvu" | "pdf",
+    storagePath: string,
+  ): Promise<Book> {
     const book = this.repo.create({
       originalFileName,
       sourceFormat,
@@ -65,15 +72,25 @@ export class BookRepository {
   }
 
   // Link book to session
-  async linkToSession(bookId: string, sessionId: string, role: "owner" | "reader" = "owner"): Promise<SessionBook> {
+  async linkToSession(
+    bookId: string,
+    sessionId: string,
+    role: "owner" | "reader" = "owner",
+  ): Promise<SessionBook> {
     const link = this.sessionBookRepo.create({ bookId, sessionId, role });
     return this.sessionBookRepo.save(link);
   }
 
   // Link book to user
-  async linkToUser(bookId: string, userId: string, role: "owner" | "reader" = "owner"): Promise<UserBook> {
+  async linkToUser(
+    bookId: string,
+    userId: string,
+    role: "owner" | "reader" = "owner",
+  ): Promise<UserBook> {
     // Unique check or handle UPSERT/ignore
-    const existing = await this.userBookRepo.findOne({ where: { bookId, userId } });
+    const existing = await this.userBookRepo.findOne({
+      where: { bookId, userId },
+    });
     if (existing) return existing;
 
     const link = this.userBookRepo.create({ bookId, userId, role });
@@ -81,7 +98,11 @@ export class BookRepository {
   }
 
   // Update book status
-  async updateStatus(id: string, status: "uploaded" | "processing" | "ready" | "failed", statusMessage?: string | null): Promise<Book> {
+  async updateStatus(
+    id: string,
+    status: "uploaded" | "processing" | "ready" | "failed",
+    statusMessage?: string | null,
+  ): Promise<Book> {
     const book = await this.repo.findOneBy({ id });
     if (!book) throw new Error(`Book ${id} not found`);
     book.status = status;
@@ -92,7 +113,10 @@ export class BookRepository {
   }
 
   // Save metadata
-  async saveMetadata(bookId: string, data: Partial<BookMetadata>): Promise<BookMetadata> {
+  async saveMetadata(
+    bookId: string,
+    data: Partial<BookMetadata>,
+  ): Promise<BookMetadata> {
     let metadata = await this.metadataRepo.findOneBy({ bookId });
     if (!metadata) {
       metadata = this.metadataRepo.create({

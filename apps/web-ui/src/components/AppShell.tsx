@@ -22,7 +22,7 @@ export const AppShell: React.FC<AppShellProps> = ({
   onLoginClick,
   onBackToHome,
   booksList = [],
-  onSelectBook
+  onSelectBook,
 }) => {
   return (
     <div className="min-h-screen flex flex-col bg-base-100 text-base-content antialiased">
@@ -39,14 +39,14 @@ export const AppShell: React.FC<AppShellProps> = ({
       />
 
       {/* Main Content Pane */}
-      <div className="flex-1 w-full flex flex-col">
-        {children}
-      </div>
+      <div className="flex-1 w-full flex flex-col">{children}</div>
 
       {/* Premium Footer */}
       <footer className="footer footer-center p-6 bg-base-200 border-t border-base-content/5 text-base-content/60 text-xs font-semibold uppercase tracking-wider">
         <div>
-          <p>© {new Date().getFullYear()} AI Book Converter — Premium E-Book Extraction Platform</p>
+          <p>
+            © {new Date().getFullYear()} AI Book Converter — PDF & DJVU to EPUB
+          </p>
         </div>
       </footer>
     </div>

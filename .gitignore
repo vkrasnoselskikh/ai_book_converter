@@ -11,3 +11,4 @@ wheels/
 .venv
 .env
 node_modules
+books

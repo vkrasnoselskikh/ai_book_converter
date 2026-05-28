@@ -328,12 +328,11 @@ export const App: React.FC<{ initialState?: InitialState }> = ({
         <div className="flex-1 flex flex-col justify-center items-center py-16 px-4">
           <div className="max-w-xl text-center mb-8">
             <h2 className="font-heading font-extrabold text-4xl sm:text-5xl tracking-tight mb-4">
-              Premium E-Book Converter
+              AI Book Converter
             </h2>
             <p className="text-base-content/75 text-lg">
-              Upload your EPUB or DJVU files to instantly extract metadata,
-              tables, covers, and prepare a rich HTML visual preview powered by
-              AI.
+              Upload scanned PDF or DJVU files to extract text, tables, and
+              images via AI. Download a ready EPUB with proper e-book markup.
             </p>
           </div>
           <BookUploadPanel
@@ -356,8 +355,8 @@ export const App: React.FC<{ initialState?: InitialState }> = ({
                     Processing Book...
                   </h3>
                   <p className="text-sm text-base-content/65 leading-relaxed">
-                    Executing conversion filters, table/image extractions, and
-                    running Mistral LLM analysis. This might take a few moments.
+                    Converting, extracting text, tables, and images via Mistral
+                    AI. This might take a few moments.
                   </p>
                 </div>
                 <div className="w-full bg-base-300 h-1.5 rounded-full overflow-hidden">
@@ -590,9 +589,8 @@ export const App: React.FC<{ initialState?: InitialState }> = ({
               Sync Your History
             </h3>
             <p className="text-sm text-base-content/65 text-center mb-6 leading-relaxed">
-              Choose one of our premium mock auth options to simulate external
-              login validation and securely transfer your books to your personal
-              profile.
+              Sign in to keep your converted EPUBs. Your anonymous uploads will
+              be linked to your profile.
             </p>
 
             <div className="flex flex-col gap-3">
