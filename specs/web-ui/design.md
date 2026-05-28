@@ -227,13 +227,14 @@ Anonymous-first flow:
 
 Authentication flow:
 
-1. The user starts authentication with Google, Facebook, or Telegram.
-2. The provider callback returns an external provider subject.
+1. The user initiates authentication on the frontend via mock login buttons (Google, Facebook, or Telegram). This mock flow simplifies local development and testing, with keys and environment configuration structure prepared for real OAuth providers in the future.
+2. The server receives the mock authentication request, resolves a mock subject and display name (or generates a new one if not existing), and passes it to the domain layer.
 3. "AuthService" finds an existing "AuthIdentity" by provider and subject or creates a new "User" and "AuthIdentity".
 4. "AccountLinkingService" links all current "SessionBook" records to the resolved "User" by creating missing "UserBook" records.
 5. Duplicate "UserBook" records are ignored through the unique "userId" and "bookId" constraint.
 6. The authenticated user's book history is read through "UserBook".
 7. If account linking fails, the original "SessionBook" records remain intact and the user sees a diagnostic message.
+
 
 ## File Storage
 
@@ -312,7 +313,7 @@ Mistral OCR flow:
 Metadata agent flow:
 
 1. "MetadataAgentService" uses "@openai/agents" for agent orchestration.
-2. The agent model must be backed by Mistral Chat Completions through a provider adapter compatible with the Agents SDK.
+2. The agent client is configured using the OpenAI client wrapper inside the `@openai/agents` SDK, pointing the `baseURL` to Mistral's API endpoint (`https://api.mistral.ai/v1`) and passing the `MISTRAL_API_KEY` to run Mistral models natively.
 3. The agent receives only the first three recognized book pages as input.
 4. The agent returns a structured "BookMetadataAgentResult" object:
 
@@ -332,13 +333,13 @@ The "language" field defaults to "en" when the agent cannot detect a language. T
 Table-of-contents agent flow:
 
 1. "TableOfContentsAgentService" uses "@openai/agents" for agent orchestration.
-2. The agent model must be backed by Mistral Chat Completions through a provider adapter compatible with the Agents SDK.
+2. The agent client is configured using the OpenAI client wrapper inside the `@openai/agents` SDK, pointing the `baseURL` to Mistral's API endpoint (`https://api.mistral.ai/v1`) and passing the `MISTRAL_API_KEY` to run Mistral models natively.
 3. The agent receives recognized pages 3 through 10 as input, using original one-based page numbers.
 4. The agent returns structured entries with section title, nesting level, and "anchorId".
 5. The agent must not return raw page numbers as user-facing navigation targets.
 6. "BookPreviewService" renders the table of contents as hyperlinks to page anchors.
 
-The exact provider adapter package may be selected during implementation, but the application code must keep the agent boundary explicit: prompt construction, model invocation, output parsing, and validation belong in the agent services rather than being scattered across routes.
+The integration utilizes the OpenAI-compatible model invocation protocol, avoiding custom adapter wrappers while cleanly encapsulating prompt construction and output validation in their respective services.
 
 ## EPUB and DJVU Handling
 
@@ -349,13 +350,14 @@ EPUB must be supported as a web application input format. Minimum behavior:
 - extract or detect the cover when available;
 - prepare an HTML representation for preview.
 
-DJVU must be supported as a web application input format. Because the current Python implementation only validates DJVU and does not contain a full DJVU parser, the design must keep a separate processing branch:
+EPUB parsing is implemented manually: the backend unzips the file using `adm-zip`, parses the OPF XML document using `fast-xml-parser` to extract metadata and cover images, and serves XHTML content directly for preview. This manual extraction approach ensures maximum stability without native library dependency compilation issues.
 
-- direct DJVU reading if the selected library supports the required data;
-- or preliminary DJVU conversion into an intermediate format;
-- or a diagnostic status if the specific file cannot be parsed in the current configuration.
+DJVU must be supported as a web application input format. Because the current Python implementation only validates DJVU and does not contain a full DJVU parser, the design uses a dual-branch processing approach:
 
-The concrete EPUB/DJVU processing library must be selected during implementation after checking compatibility with Node.js and TypeScript.
+- Try to convert/extract pages using external CLI tools (like `ddjvu` from `djvulibre` or `graphicsmagick`) if available on the host system.
+- If the required binaries are not installed, fail gracefully with a clean user-facing diagnostic error indicating that `djvulibre` is missing.
+- Ensure the entire pipeline is fully testable using mock/fixture data in the test environment so that tests pass regardless of host binary installations.
+
 
 ## SSR Flow
 

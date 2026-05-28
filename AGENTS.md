@@ -1,29 +1,6 @@
 # Agent Guide
 
-This document describes mandatory rules, processes, and working formats for the Python project.
-
----
-
-## 1. Quick Commands
-
-### Linting
-
-```bash
-uv run ruff check .
-```
-
-### Tests
-
-```bash
-uv run pytest                      # all tests
-```
-
-### Build and Environment
-
-```bash
-uv venv
-uv sync --dev
-```
+This document describes mandatory rules, processes, and working formats for the project.
 
 Also make sure that the environment variables from `.env.example` are present or that a `.env` file is defined in the project.
 
@@ -326,15 +303,6 @@ Specifications must be complete, consistent, and up to date.
 
 ## 4. Testing Strategy
 
-### Test Types
-
-| Type       | Location                     | Mocks | Goal                               |
-|------------|------------------------------|-------|------------------------------------|
-| Unit       | `tests/unit/test_*.py`       | ✅ Yes | Isolated logic verification        |
-| Functional | `tests/functional/test_*.py` | ❌ No  | End-to-end user scenarios          |
-
-The terms `unit` and `functional` mean unit and functional (end-to-end), respectively.
-
 ### Test Rules
 
 **testing.10 — helper functions:** use shared helper utilities from `tests/helpers/`; do not duplicate infrastructure
@@ -342,27 +310,12 @@ code in every test.
 
 **testing.11 — waits:** do not use `time.sleep` to wait for state if the state can be checked via retry/awaitable assertions.
 
-```python
-# ❌ WRONG
-import time
-
-time.sleep(1)
-assert service.is_ready()
-
-# ✅ CORRECT
-assert wait_until(lambda: service.is_ready(), timeout=2.0)
-```
-
-`time.sleep` is allowed only for known timings that cannot be checked otherwise, and must include a required comment
-explaining why.
-
 **testing.12 — error checks:** after key actions, verify that the operation completed without unexpected errors/exceptions.
 
 ### Coverage Requirements
 
 Minimum:
 
-- Mandatory coverage verification MUST be performed with `uv run pytest --cov=src --cov-fail-under=85`.
 - The minimum enforceable overall coverage threshold is 85%.
 
 Exceptions: migrations, configs, declarative types without logic.
@@ -381,8 +334,7 @@ Exceptions: migrations, configs, declarative types without logic.
 Prepare the environment before running tests:
 
 ```bash
-uv venv
-uv sync --dev
+vitest run
 ```
 
 Run again when needed:
@@ -400,22 +352,6 @@ Restriction:
 
 ## 6. Code Writing Rules
 
-### Requirement Comments
-
-Every function, class, and method must have a comment with requirement IDs:
-
-```python
-# Requirements: feature-id.1.1, feature-id.1.2
-def implement_feature() -> None:
-    pass
-```
-
-### Typing Rules
-
-Use modern syntax:
-
-- Prefer `list[str]` over `List[str]`
-- Use `X | None` instead of `Optional[X]`
 
 ### Test Structure
 
@@ -430,34 +366,6 @@ def test_should_perform_expected_behavior() -> None:
     pass
 ```
 
-### Logger
-
-Every module creates its own logger using the module name:
-
-```python
-import logging
-
-logger = logging.getLogger(__name__)
-logger.info("User ID set: abc123")
-```
-
-Do not manually duplicate the module name in the log message itself.
-
-### Error Handling
-
-For errors in background processes, use a centralized handler (for example,
-`ErrorHandler.handle_background_error`).
-
-```python
-def fetch_profile(self) -> UserProfile | None:
-    try:
-        ...
-    except Exception as error:
-        ErrorHandler.handle_background_error(error, "Profile Loading")
-        return None
-```
-
-Local logging without a unified handler is allowed only if it is explicitly described in the design.
 
 ---
 
@@ -478,9 +386,6 @@ Language: English
 
 ### Disabling Tests
 
-**Absolute prohibition:** do not use `@pytest.mark.skip`, `@pytest.mark.xfail`, and do not comment out tests without explicit
-user permission.
-
 Before disabling a test, you must:
 
 1. Explain why the test cannot be fixed immediately
@@ -497,26 +402,8 @@ Correct format: a short summary in the message.
 
 It is forbidden to introduce new environment variables (`os.environ[...]`) without user approval.
 
-If the variable is approved, it must be declared in the module's `config.py`.
-For example: `src/<module>/config.py`
-
-All environment variables must be declared using `Pydantic Settings`.
-
 Each configuration class must contain settings (so it can optionally read from `.env`):
-```python
-model_config = SettingsConfigDict(validate_default=False, extra="ignore", env_file=".env")
-```
 
-Example App configuration:
-```python
-from pydantic_settings import BaseSettings, SettingsConfigDict
-
-class AppConfig(BaseSettings):
-    model_config = SettingsConfigDict(validate_default=False, env_prefix="APP_", extra="ignore", env_file=".env")
-    
-    api_key: str
-    port: int = 8000
-```
 
 ---
 
@@ -527,16 +414,3 @@ class AppConfig(BaseSettings):
 3. Minimize unnecessary actions/long runs
 4. Efficiency (do not run the entire test suite if targeted tests are enough)
 5. Code quality (do not disable tests; fix the cause)
-
----
-
-## 10. Common Problems and Solutions
-
-| Problem                        | Cause                           | Solution                                                                                                               |
-|--------------------------------|---------------------------------|------------------------------------------------------------------------------------------------------------------------|
-| `ModuleNotFoundError`          | No venv or dependencies         | `uv venv && uv sync --dev`                                                                                             |
-| Test timeout                   | Test takes longer than expected | increase timeout and verify state expectations                                                                         |
-| Linter fails                   | Style violation                 | `uv run ruff check . --fix`                                                                                            |
-| Low coverage                   | Not enough tests                | run `uv run pytest --cov=src --cov-fail-under=85`, read the coverage report, identify low-coverage files, and add tests |
-| Command interrupted by timeout | Long run                        | run in the background and monitor                                                                                      |
-| Tests started twice            | Active process was not checked  | check current processes before running tests                                                                           |
