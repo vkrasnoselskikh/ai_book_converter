@@ -1,5 +1,6 @@
 import { Mistral } from "@mistralai/mistralai";
 import fs from "fs";
+import path from "path";
 import { config } from "../config/appConfig.js";
 import { getErrorMessage, getLogger } from "../utils/logger.js";
 
@@ -79,23 +80,23 @@ export class MistralOcrService {
     } else {
       try {
         logger.info(`Starting live upload of ${filePath} to Mistral...`);
+        const uploadFile = fs.readFileSync(filePath);
         const uploadResponse = await this.client.files.upload({
-          file: fs.createReadStream(filePath) as any,
+          file: {
+            fileName: path.basename(filePath),
+            content: new Uint8Array(uploadFile),
+          },
           purpose: "ocr"
         });
 
         logger.info(`File uploaded to Mistral. ID: ${uploadResponse.id}`);
 
-        const signedUrl = await this.client.files.getSignedUrl({
-          fileId: uploadResponse.id
-        });
-
         logger.info(`Starting Mistral OCR process using model: ${config.mistralOcrModel}`);
         const ocrResponse = await this.client.ocr.process({
           model: config.mistralOcrModel,
           document: {
-            type: "document_url",
-            documentUrl: signedUrl.url
+            type: "file",
+            fileId: uploadResponse.id
           },
           tableFormat: "html",
           includeImageBase64: true,
