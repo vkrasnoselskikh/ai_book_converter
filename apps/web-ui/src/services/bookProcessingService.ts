@@ -9,6 +9,10 @@ import { AgentService } from "./agentService.js";
 import { NormalizationService } from "./normalizationService.js";
 import { EndnoteService } from "./endnoteService.js";
 import { PreviewRenderService } from "./previewRenderService.js";
+import {
+  CoverExtractionService,
+  decodeBase64Image,
+} from "./coverExtractionService.js";
 import { getLogger } from "../utils/logger.js";
 
 const logger = getLogger("bookProcessingService");
@@ -77,35 +81,27 @@ export class BookProcessingService {
     if (!fs.existsSync(coverDir)) fs.mkdirSync(coverDir, { recursive: true });
 
     // 1. Process PDF directly via Mistral OCR
+    const targetCoverPath = path.join(coverDir, "cover.png");
+    try {
+      logger.info("Rendering first PDF page as cover...");
+      await CoverExtractionService.extractPdfFirstPageCover(
+        filePath,
+        targetCoverPath,
+      );
+    } catch (coverErr) {
+      logger.error(
+        "PDF first-page cover rendering failed; OCR fallback will be used:",
+        coverErr,
+      );
+    }
+
     logger.info("Triggering Mistral OCR on PDF...");
     const ocrPages = await this.ocrService.processDocument(filePath);
 
     // 2. Save any extracted images to disk
     logger.info("Saving OCR-extracted page images...");
-    // Try extracting cover from the first page
-    const targetCoverPath = path.join(coverDir, "cover.png");
-    for (const page of ocrPages) {
-      for (const img of page.images) {
-        if (img.imageBase64) {
-          const imgBuffer = Buffer.from(
-            img.imageBase64.split(",").pop() || "",
-            "base64",
-          );
-          this.storageService.writeFile(bookId, "images", img.id, imgBuffer);
-        }
-      }
-      // Save the first page as cover
-      if (page.images.length > 0 && !fs.existsSync(targetCoverPath)) {
-        const firstImg = page.images[0];
-        if (firstImg.imageBase64) {
-          const imgBuffer = Buffer.from(
-            firstImg.imageBase64.split(",").pop() || "",
-            "base64",
-          );
-          fs.writeFileSync(targetCoverPath, imgBuffer);
-        }
-      }
-    }
+    this.saveOcrImages(bookId, ocrPages);
+    this.writeFirstOcrImageCoverFallback(ocrPages, targetCoverPath);
 
     // 3. Extract metadata via AgentService
     logger.info("Running Metadata Agent...");
@@ -115,13 +111,18 @@ export class BookProcessingService {
       .join("\n\n");
     const agentMetadata =
       await this.agentService.extractMetadata(firstPagesText);
+    this.writeAgentCoverFallback(agentMetadata.cover_image, targetCoverPath);
 
     // 4. Extract Table of Contents via AgentService
     logger.info("Running Table of Contents Agent...");
-    const tocAgentEntries = await this.agentService.extractTableOfContents(
+    const tocAgentEntries = this.normalizeTocEntries(
+      await this.agentService.extractTableOfContents(
+        ocrPages
+          .slice(2, 10)
+          .map((p) => ({ pageNumber: p.pageNumber, text: p.markdown })),
+      ),
       ocrPages
-        .slice(2, 10)
-        .map((p) => ({ pageNumber: p.pageNumber, text: p.markdown })),
+        .map((p) => ({ pageNumber: p.pageNumber, anchorId: p.anchorId })),
     );
 
     // 5. Normalize pages
@@ -278,7 +279,7 @@ export class BookProcessingService {
     // 2. Extract cover image from first page
     logger.info("Extracting first page cover image...");
     try {
-      DjvuConverter.extractPageImage(filePath, 1, targetCoverPath);
+      CoverExtractionService.extractDjvuFirstPageCover(filePath, targetCoverPath);
     } catch (coverErr) {
       logger.error(
         "DJVU Cover extraction failed (using placeholder fallback):",
@@ -292,17 +293,8 @@ export class BookProcessingService {
 
     // 4. Save any extracted images to disk
     logger.info("Saving OCR-extracted page images...");
-    for (const page of ocrPages) {
-      for (const img of page.images) {
-        if (img.imageBase64) {
-          const imgBuffer = Buffer.from(
-            img.imageBase64.split(",").pop() || "",
-            "base64",
-          );
-          this.storageService.writeFile(bookId, "images", img.id, imgBuffer);
-        }
-      }
-    }
+    this.saveOcrImages(bookId, ocrPages);
+    this.writeFirstOcrImageCoverFallback(ocrPages, targetCoverPath);
 
     // 5. Extract metadata via AgentService
     logger.info("Running Metadata Agent...");
@@ -312,13 +304,18 @@ export class BookProcessingService {
       .join("\n\n");
     const agentMetadata =
       await this.agentService.extractMetadata(firstPagesText);
+    this.writeAgentCoverFallback(agentMetadata.cover_image, targetCoverPath);
 
     // 6. Extract Table of Contents via AgentService
     logger.info("Running Table of Contents Agent...");
-    const tocAgentEntries = await this.agentService.extractTableOfContents(
+    const tocAgentEntries = this.normalizeTocEntries(
+      await this.agentService.extractTableOfContents(
+        ocrPages
+          .slice(2, 10)
+          .map((p) => ({ pageNumber: p.pageNumber, text: p.markdown })),
+      ),
       ocrPages
-        .slice(2, 10)
-        .map((p) => ({ pageNumber: p.pageNumber, text: p.markdown })),
+        .map((p) => ({ pageNumber: p.pageNumber, anchorId: p.anchorId })),
     );
 
     // 7. Normalize pages, blocks, tables, images, and warnings
@@ -388,5 +385,91 @@ export class BookProcessingService {
 
     // Update book status to ready
     await this.bookRepository.updateStatus(bookId, "ready");
+  }
+
+  private saveOcrImages(bookId: string, ocrPages: Array<{ images: any[] }>): void {
+    for (const page of ocrPages) {
+      for (const img of page.images) {
+        const imgBuffer = decodeBase64Image(img.imageBase64);
+        if (imgBuffer) {
+          this.storageService.writeFile(bookId, "images", img.fileName, imgBuffer);
+        }
+      }
+    }
+  }
+
+  private writeFirstOcrImageCoverFallback(
+    ocrPages: Array<{ pageNumber: number; images: any[] }>,
+    targetCoverPath: string,
+  ): void {
+    if (fs.existsSync(targetCoverPath)) {
+      return;
+    }
+    const firstPage = ocrPages.find((page) => page.pageNumber === 1);
+    const firstImage = firstPage?.images.find((img) => img.imageBase64);
+    if (firstImage?.imageBase64) {
+      CoverExtractionService.writeBase64Cover(firstImage.imageBase64, targetCoverPath);
+    }
+  }
+
+  private writeAgentCoverFallback(
+    coverImageBase64: string | undefined,
+    targetCoverPath: string,
+  ): void {
+    if (
+      !coverImageBase64 ||
+      fs.existsSync(targetCoverPath) ||
+      CoverExtractionService.isPlaceholderCoverImage(coverImageBase64)
+    ) {
+      return;
+    }
+    CoverExtractionService.writeBase64Cover(coverImageBase64, targetCoverPath);
+  }
+
+  private normalizeTocEntries(
+    entries: Array<{ title: string; level: number; anchorId: string }>,
+    pages: Array<{ pageNumber: number; anchorId: string }>,
+  ): Array<{ title: string; level: number; anchorId: string }> {
+    if (pages.length === 0) {
+      return entries;
+    }
+
+    const sortedPages = [...pages].sort((a, b) => a.pageNumber - b.pageNumber);
+    const anchors = new Set(sortedPages.map((page) => page.anchorId));
+
+    return entries.map((entry) => {
+      if (anchors.has(entry.anchorId)) {
+        return {
+          title: entry.title || "Section",
+          level: this.normalizeTocLevel(entry.level),
+          anchorId: entry.anchorId,
+        };
+      }
+
+      const requestedPage = this.extractAnchorPageNumber(entry.anchorId);
+      const fallbackPage = requestedPage
+        ? sortedPages.reduce((nearest, page) =>
+            Math.abs(page.pageNumber - requestedPage) <
+            Math.abs(nearest.pageNumber - requestedPage)
+              ? page
+              : nearest,
+          )
+        : sortedPages[0];
+
+      return {
+        title: entry.title || "Section",
+        level: this.normalizeTocLevel(entry.level),
+        anchorId: fallbackPage.anchorId,
+      };
+    });
+  }
+
+  private normalizeTocLevel(level: number): number {
+    return Number.isInteger(level) && level > 0 ? level : 1;
+  }
+
+  private extractAnchorPageNumber(anchorId: string): number | null {
+    const match = /^page-(\d+)$/.exec(anchorId || "");
+    return match ? parseInt(match[1], 10) : null;
   }
 }

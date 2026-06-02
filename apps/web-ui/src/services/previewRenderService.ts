@@ -5,6 +5,8 @@ export interface PreviewImage {
   width: number;
   height: number;
   imageBase64?: string;
+  fileName?: string;
+  mimeType?: string;
   source_path?: string;
 }
 
@@ -15,6 +17,8 @@ export interface PreviewTable {
 
 export interface PreviewPage {
   pageIndex: number;
+  pageNumber?: number;
+  anchorId?: string;
   markdown: string;
   images: PreviewImage[];
   tables: PreviewTable[];
@@ -119,9 +123,8 @@ export class PreviewRenderService {
       let pageHtml = this.compileMarkdown(pageMarkdown);
       pageHtml = this.normalizeImageSources(pageHtml, imageHrefPrefix);
 
-      renderedSections.push(
-        `<section id="page-${page.pageIndex}">\n${pageHtml}\n</section>`,
-      );
+      const anchorId = page.anchorId || (page.pageNumber ? `page-${page.pageNumber}` : `page-${page.pageIndex + 1}`);
+      renderedSections.push(`<section id="${anchorId}">\n${pageHtml}\n</section>`);
     }
 
     return renderedSections.join("\n\n");
@@ -181,10 +184,19 @@ export class PreviewRenderService {
     for (const img of images) {
       const imgName = img.source_path
         ? path.basename(img.source_path)
-        : `${img.id}.png`;
-      const placeholder = `![${img.id}](${img.id})`;
+        : (img.fileName || `${img.id}.png`);
       const markdownImage = `![${img.id}](${imageHrefPrefix}/${imgName})`;
-      updated = updated.replace(placeholder, markdownImage);
+      const targets = Array.from(
+        new Set([img.id, img.fileName, imgName, img.source_path ? path.basename(img.source_path) : null].filter(Boolean) as string[]),
+      );
+
+      for (const target of targets) {
+        const escapedTarget = this.escapeRegExp(target);
+        updated = updated.replace(
+          new RegExp(`!\\[([^\\]]*)\\]\\(${escapedTarget}\\)`, "g"),
+          markdownImage,
+        );
+      }
     }
     return updated;
   }
@@ -196,5 +208,9 @@ export class PreviewRenderService {
       return normalized;
     }
     return normalized.replace(/src="images\//g, `src="${imageHrefPrefix}/`);
+  }
+
+  private static escapeRegExp(value: string): string {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   }
 }

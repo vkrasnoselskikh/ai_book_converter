@@ -210,8 +210,7 @@ li {
 
     if (tocEntries.length > 0) {
       tocEntries.forEach((entry: any, idx: number) => {
-        const match = entry.anchorId.match(/page-(\d+)/);
-        const pageIdx = match ? parseInt(match[1], 10) : idx;
+        const pageIdx = this.anchorIdToGeneratedPageIndex(entry.anchorId, idx);
         const targetXhtml = `xhtml/page-${pageIdx}.xhtml`;
 
         navPoints.push(`    <navPoint id="navpoint-${idx + 1}" playOrder="${idx + 1}">
@@ -249,5 +248,13 @@ li {
     zip.addFile("OEBPS/toc.ncx", Buffer.from(ncxXml, "utf-8"));
 
     return zip.toBuffer();
+  }
+
+  private static anchorIdToGeneratedPageIndex(anchorId: string, fallbackIndex: number): number {
+    const match = /^page-(\d+)$/.exec(anchorId || "");
+    if (!match) {
+      return fallbackIndex;
+    }
+    return Math.max(0, parseInt(match[1], 10) - 1);
   }
 }

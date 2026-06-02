@@ -42,6 +42,7 @@ This specification describes the implementation of "apps/web-ui": React TSX fron
 - ✅ Phase 5 React Components & SPA Widgets: Implemented AppShell, ThemeContext Emerald/Forest Day/Night toggles, HeaderBar selector, responsive BookUploadPanel, collapsible BookReader sidebar, and metadata/cover editors.
 - ✅ Phase 6 Unit Testing: Wrote full Vitest test suite in `apps/web-ui/tests/unit/services.test.ts`.
 - ✅ Phase 8 Validation and Hardening: Verified implementation matches requirements and design, fixed image markdown rendering bugs, fixed TypeScript compilation/unused variable errors, resolved logging library issues, ran full project-wide checks (Ruff, Pytest, Vite/TSC typecheck, and Vitest), ensuring 100% of validation passes.
+- ✅ Phase 9 OCR image, cover, and TOC bugfixes: Persisted OCR images with stable filenames, added first-page PDF/DJVU cover extraction with fallbacks, aligned preview anchors with TOC links, and added regression tests.
 
 ### In Progress
 

@@ -1,7 +1,7 @@
 import { Mistral } from "@mistralai/mistralai";
 import fs from "fs";
 import { config } from "../config/appConfig.js";
-import { getLogger } from "../utils/logger.js";
+import { getErrorMessage, getLogger } from "../utils/logger.js";
 
 const logger = getLogger("mistralOcrService");
 
@@ -41,6 +41,8 @@ export interface NormalizedPage {
     width: number;
     height: number;
     imageBase64?: string;
+    fileName: string;
+    mimeType: string;
   }>;
   tables: Array<{
     id: string;
@@ -105,7 +107,7 @@ export class MistralOcrService {
         rawOcrResult = typeof ocrResponse === "string" ? JSON.parse(ocrResponse) : ocrResponse;
       } catch (err: any) {
         logger.error("Mistral OCR api failed, falling back or throwing: ", err);
-        throw new Error(`Mistral OCR Service Error: ${err.message}`);
+        throw new Error(`Mistral OCR Service Error: ${getErrorMessage(err)}`);
       }
     }
 
@@ -116,7 +118,7 @@ export class MistralOcrService {
   normalizeOcrResponse(rawResponse: any): NormalizedPage[] {
     const rawPages: OcrPage[] = rawResponse.pages || [];
     
-    return rawPages.map((rawPage) => {
+    return rawPages.map((rawPage, pagePosition) => {
       const pageIndex = typeof rawPage.index === "number" 
         ? rawPage.index 
         : (typeof rawPage.page_index === "number" ? rawPage.page_index : 0);
@@ -141,14 +143,20 @@ export class MistralOcrService {
       }
 
       // Images normalization
-      const images = (rawPage.images || []).map((img) => {
+      const images = (rawPage.images || []).map((img, imagePosition) => {
+        const fallbackId = `page-${pageNumber}-image-${imagePosition + 1}`;
+        const id = img.id || fallbackId;
+        const mimeType = inferImageMimeType(img.image_base64);
+        const fileName = buildImageFileName(id, mimeType, pagePosition, imagePosition);
         const width = Math.max(0, (img.bottom_right_x || 0) - (img.top_left_x || 0));
         const height = Math.max(0, (img.bottom_right_y || 0) - (img.top_left_y || 0));
         return {
-          id: img.id || `img-${Math.random().toString(36).substr(2, 9)}`,
+          id,
           width: width || 400,
           height: height || 300,
-          imageBase64: img.image_base64
+          imageBase64: img.image_base64,
+          fileName,
+          mimeType
         };
       });
 
@@ -208,4 +216,46 @@ export class MistralOcrService {
       ]
     };
   }
+}
+
+export function inferImageMimeType(imageBase64?: string): string {
+  if (!imageBase64) {
+    return "image/png";
+  }
+  const match = imageBase64.match(/^data:([^;,]+)[;,]/);
+  return match?.[1] || "image/png";
+}
+
+export function imageExtensionFromMimeType(mimeType: string): string {
+  switch (mimeType.toLowerCase()) {
+    case "image/jpeg":
+    case "image/jpg":
+      return ".jpg";
+    case "image/webp":
+      return ".webp";
+    case "image/gif":
+      return ".gif";
+    case "image/png":
+    default:
+      return ".png";
+  }
+}
+
+export function buildImageFileName(
+  id: string,
+  mimeType: string,
+  pagePosition: number,
+  imagePosition: number,
+): string {
+  const safeBaseName = sanitizeImageBaseName(id) || `page-${pagePosition + 1}-image-${imagePosition + 1}`;
+  const existingExt = safeBaseName.match(/\.(png|jpe?g|webp|gif)$/i)?.[0];
+  return existingExt ? safeBaseName : `${safeBaseName}${imageExtensionFromMimeType(mimeType)}`;
+}
+
+function sanitizeImageBaseName(id: string): string {
+  return id
+    .replace(/[/\\]/g, "_")
+    .replace(/[^a-zA-Z0-9._-]/g, "_")
+    .replace(/^\.+/, "")
+    .slice(0, 120);
 }

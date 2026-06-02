@@ -309,6 +309,10 @@ Mistral OCR flow:
 3. The service normalizes every OCR page into an internal page object with both zero-based "pageIndex" and one-based "pageNumber".
 4. The service assigns "anchorId" to every page using the stable "page-<pageNumber>" format.
 5. Preview rendering writes the anchor into the page HTML so links can target the original page position.
+6. "MistralOcrService" normalizes OCR images with stable "fileName" and "mimeType" fields derived from the image identifier and base64 data URI.
+7. "BookProcessingService" saves OCR images using their normalized "fileName"; preview and EPUB rendering use the same filename without adding a second extension.
+8. "CoverExtractionService" renders the first document page as "cover/cover.png" for PDF inputs and delegates DJVU first-page extraction to "DjvuConverter".
+9. If first-page rendering is unavailable, cover fallback order is: first OCR image on page 1, non-placeholder metadata-agent cover image, then no cover.
 
 Metadata agent flow:
 
@@ -338,6 +342,8 @@ Table-of-contents agent flow:
 4. The agent returns structured entries with section title, nesting level, and "anchorId".
 5. The agent must not return raw page numbers as user-facing navigation targets.
 6. "BookPreviewService" renders the table of contents as hyperlinks to page anchors.
+7. "BookProcessingService" validates table-of-contents anchors against the recognized one-based page anchors and falls back to the nearest available page anchor when needed.
+8. EPUB download navigation maps "page-1" to the first generated OCR XHTML page, preserving the one-based preview anchor contract.
 
 The integration utilizes the OpenAI-compatible model invocation protocol, avoiding custom adapter wrappers while cleanly encapsulating prompt construction and output validation in their respective services.
 
@@ -456,10 +462,10 @@ Each error must have:
 |-------------|------------|-------------------|
 | web-ui.1 | `apps/web-ui/tests/unit/test_ssr.tsx`, `apps/web-ui/tests/unit/test_session_service.ts`, `apps/web-ui/tests/unit/test_header_state.tsx` | `apps/web-ui/tests/functional/test_home_page.ts`, `apps/web-ui/tests/functional/test_header_layout.ts`, `apps/web-ui/tests/functional/test_theme_modes.ts`, `apps/web-ui/tests/functional/test_anonymous_session.ts` |
 | web-ui.2 | `apps/web-ui/tests/unit/test_book_input_validator.ts`, `apps/web-ui/tests/unit/test_book_url_builder.ts` | `apps/web-ui/tests/functional/test_book_upload.ts`, `apps/web-ui/tests/functional/test_upload_validation.ts`, `apps/web-ui/tests/functional/test_book_processing_url.ts` |
-| web-ui.3 | `apps/web-ui/tests/unit/test_metadata_service.ts`, `apps/web-ui/tests/unit/test_metadata_agent_service.ts`, `apps/web-ui/tests/unit/test_cover_service.ts` | `apps/web-ui/tests/functional/test_book_metadata.ts`, `apps/web-ui/tests/functional/test_metadata_agent.ts`, `apps/web-ui/tests/functional/test_cover_editing.ts` |
-| web-ui.4 | `apps/web-ui/tests/unit/test_preview_render_service.ts`, `apps/web-ui/tests/unit/test_endnote_service.ts`, `apps/web-ui/tests/unit/test_table_of_contents_agent_service.ts` | `apps/web-ui/tests/functional/test_book_reader.ts`, `apps/web-ui/tests/functional/test_book_processing_state.ts`, `apps/web-ui/tests/functional/test_table_of_contents.ts`, `apps/web-ui/tests/functional/test_book_processing_resume.ts` |
+| web-ui.3 | `apps/web-ui/tests/unit/test_metadata_service.ts`, `apps/web-ui/tests/unit/test_metadata_agent_service.ts`, `apps/web-ui/tests/unit/test_cover_service.ts`, `apps/web-ui/tests/unit/services.test.ts` | `apps/web-ui/tests/functional/test_book_metadata.ts`, `apps/web-ui/tests/functional/test_metadata_agent.ts`, `apps/web-ui/tests/functional/test_cover_editing.ts` |
+| web-ui.4 | `apps/web-ui/tests/unit/test_preview_render_service.ts`, `apps/web-ui/tests/unit/test_endnote_service.ts`, `apps/web-ui/tests/unit/test_table_of_contents_agent_service.ts`, `apps/web-ui/tests/unit/services.test.ts` | `apps/web-ui/tests/functional/test_book_reader.ts`, `apps/web-ui/tests/functional/test_book_processing_state.ts`, `apps/web-ui/tests/functional/test_table_of_contents.ts`, `apps/web-ui/tests/functional/test_book_processing_resume.ts` |
 | web-ui.5 | `apps/web-ui/tests/unit/test_entities.ts`, `apps/web-ui/tests/unit/test_session_service.ts` | `apps/web-ui/tests/functional/test_anonymous_books.ts`, `apps/web-ui/tests/functional/test_user_books.ts`, `apps/web-ui/tests/functional/test_shared_books.ts` |
 | web-ui.6 | `apps/web-ui/tests/unit/test_book_storage_service.ts` | `apps/web-ui/tests/functional/test_book_file_storage.ts`, `apps/web-ui/tests/functional/test_book_storage_error.ts` |
 | web-ui.7 | `apps/web-ui/tests/unit/test_ssr.tsx`, `apps/web-ui/tests/unit/test_book_url_builder.ts` | `apps/web-ui/tests/functional/test_ssr_rendering.ts`, `apps/web-ui/tests/functional/test_client_hydration.ts`, `apps/web-ui/tests/functional/test_book_url_ssr.ts` |
-| web-ui.8 | `apps/web-ui/tests/unit/test_mistral_ocr_service.ts`, `apps/web-ui/tests/unit/test_content_normalization_service.ts`, `apps/web-ui/tests/unit/test_endnote_service.ts`, `apps/web-ui/tests/unit/test_preview_render_service.ts`, `apps/web-ui/tests/unit/test_table_of_contents_agent_service.ts` | `apps/web-ui/tests/functional/test_converter_port.ts`, `apps/web-ui/tests/functional/test_partial_book_data.ts`, `apps/web-ui/tests/functional/test_ocr_page_anchors.ts`, `apps/web-ui/tests/functional/test_toc_agent.ts` |
+| web-ui.8 | `apps/web-ui/tests/unit/test_mistral_ocr_service.ts`, `apps/web-ui/tests/unit/test_content_normalization_service.ts`, `apps/web-ui/tests/unit/test_endnote_service.ts`, `apps/web-ui/tests/unit/test_preview_render_service.ts`, `apps/web-ui/tests/unit/test_table_of_contents_agent_service.ts`, `apps/web-ui/tests/unit/services.test.ts` | `apps/web-ui/tests/functional/test_converter_port.ts`, `apps/web-ui/tests/functional/test_partial_book_data.ts`, `apps/web-ui/tests/functional/test_ocr_page_anchors.ts`, `apps/web-ui/tests/functional/test_toc_agent.ts` |
 | web-ui.9 | `apps/web-ui/tests/unit/test_auth_service.ts`, `apps/web-ui/tests/unit/test_account_linking_service.ts` | `apps/web-ui/tests/functional/test_auth_providers.ts`, `apps/web-ui/tests/functional/test_session_account_linking.ts`, `apps/web-ui/tests/functional/test_authenticated_history.ts` |

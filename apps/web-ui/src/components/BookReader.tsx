@@ -24,6 +24,7 @@ export const BookReader: React.FC<BookReaderProps> = ({
   const scrollToAnchor = (anchorId: string) => {
     const element = document.getElementById(anchorId);
     if (element) {
+      window.history.replaceState(null, "", `#${anchorId}`);
       element.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   };
@@ -49,12 +50,16 @@ export const BookReader: React.FC<BookReaderProps> = ({
             <ul className="menu menu-xs w-full p-0 gap-1">
               {tocEntries.map((entry, idx) => (
                 <li key={idx} style={{ paddingLeft: `${(entry.level - 1) * 12}px` }}>
-                  <button 
-                    onClick={() => scrollToAnchor(entry.anchorId)}
+                  <a
+                    href={`#${entry.anchorId}`}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      scrollToAnchor(entry.anchorId);
+                    }}
                     className="py-2.5 px-3 rounded-xl hover:bg-base-content/5 text-left font-semibold text-base-content/85 block truncate"
                   >
                     {entry.title}
-                  </button>
+                  </a>
                 </li>
               ))}
             </ul>

@@ -37,12 +37,6 @@ make lint
 make test
 ```
 
-4. Ensure all checks pass:
-   - ✅ Ruff check
-   - ✅ Ruff format
-   - ✅ ty check
-   - ✅ Pytest
-
 ### Report
 
 Provide a short report in the message, without creating separate files:
@@ -376,8 +370,6 @@ Language: English
 ### Naming
 
 - Module, class, and function names must be in English
-- Use `PascalCase` for classes
-- Use `snake_case` for functions/variables
 - When mentioning components in documents, use quotes
 
 ---

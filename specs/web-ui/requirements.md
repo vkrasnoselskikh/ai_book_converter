@@ -93,6 +93,8 @@ The system must provide a single-page web application named "AI Book converter".
 3.7. WHEN the system extracts metadata with the metadata agent, the agent SHALL use the first three pages of the book as input.
 3.8. WHEN metadata extraction succeeds, the system SHALL store the title, authors, ISBN numbers, language, cover subtitle, and cover image.
 3.9. IF the metadata agent does not detect a language, the system SHALL use "en" as the default language.
+3.10. WHEN PDF or DJVU OCR processing can render the first document page as an image, the system SHALL save that first-page image as the current cover.
+3.11. IF first-page cover rendering is unavailable during OCR processing, the system SHALL use an available OCR image from the first page as the cover.
 
 #### Functional Tests
 
@@ -214,6 +216,8 @@ The system must provide a single-page web application named "AI Book converter".
 8.10. WHEN the table-of-contents agent runs, it SHALL use pages 3 through 10 of the book as input.
 8.11. WHEN the table-of-contents agent returns entries, each entry SHALL contain a title and a hyperlink target page anchor.
 8.12. WHEN the table-of-contents agent returns entries, entries SHALL NOT use raw page numbers as the user-facing navigation target.
+8.13. WHEN OCR images are saved, the system SHALL persist and render them with stable filenames that match the preview and EPUB image references.
+8.14. WHEN preview content is rendered from OCR pages, the system SHALL use one-based page anchors that match table-of-contents links.
 
 #### Functional Tests
 

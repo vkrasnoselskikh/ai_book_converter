@@ -9,7 +9,10 @@ import { NormalizationService } from "../../src/services/normalizationService.js
 import { EndnoteService } from "../../src/services/endnoteService.js";
 import { PreviewRenderService } from "../../src/services/previewRenderService.js";
 import { AuthService } from "../../src/services/authService.js";
+import { CoverExtractionService } from "../../src/services/coverExtractionService.js";
+import { EpubPackager } from "../../src/services/epubPackager.js";
 import { initializeDatabase } from "../../src/database/dataSource.js";
+import AdmZip from "adm-zip";
 
 describe("AI Book Converter Web-UI Domain Services", () => {
   
@@ -57,6 +60,12 @@ describe("AI Book Converter Web-UI Domain Services", () => {
           {
             index: 0,
             markdown: "Page 1 Content",
+            images: [
+              {
+                id: "img/cover",
+                image_base64: "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2w=="
+              }
+            ],
             headers: ["Header Block"],
             footers: ["Footer Block"]
           }
@@ -71,6 +80,9 @@ describe("AI Book Converter Web-UI Domain Services", () => {
       expect(normalized[0].markdown).toBe("Page 1 Content");
       expect(normalized[0].headers).toContain("Header Block");
       expect(normalized[0].footers).toContain("Footer Block");
+      expect(normalized[0].images[0].id).toBe("img/cover");
+      expect(normalized[0].images[0].mimeType).toBe("image/jpeg");
+      expect(normalized[0].images[0].fileName).toBe("img_cover.jpg");
     });
   });
 
@@ -152,6 +164,8 @@ describe("AI Book Converter Web-UI Domain Services", () => {
       const pages = [
         {
           pageIndex: 0,
+          pageNumber: 1,
+          anchorId: "page-1",
           markdown: md,
           images: [{ id: "img-1", width: 400, height: 300, source_path: "cover.png" }],
           tables: [{ id: "tbl-1", contentHtml: "<table><tr><td>Cell</td></tr></table>" }]
@@ -160,11 +174,99 @@ describe("AI Book Converter Web-UI Domain Services", () => {
 
       const html = PreviewRenderService.renderBodySections(pages, "/api/files");
       expect(html).toContain('src="/api/files/cover.png"');
+      expect(html).toContain('<section id="page-1">');
       expect(html).toContain("<table><tr><td>Cell</td></tr></table>");
+    });
+
+    it("should render OCR images using the normalized saved filename", () => {
+      const html = PreviewRenderService.renderBodySections(
+        [
+          {
+            pageIndex: 0,
+            pageNumber: 1,
+            anchorId: "page-1",
+            markdown: "OCR image ![detected illustration](img/cover)",
+            images: [
+              {
+                id: "img/cover",
+                fileName: "img_cover.jpg",
+                mimeType: "image/jpeg",
+                width: 400,
+                height: 300
+              }
+            ],
+            tables: []
+          }
+        ],
+        "/api/books/book-id/files/images"
+      );
+
+      expect(html).toContain('src="/api/books/book-id/files/images/img_cover.jpg"');
+      expect(html).toContain('<section id="page-1">');
+    });
+
+    it("should render one-based fallback page anchors when anchorId is absent", () => {
+      const html = PreviewRenderService.renderBodySections(
+        [
+          {
+            pageIndex: 0,
+            pageNumber: 1,
+            markdown: "First page",
+            images: [],
+            tables: []
+          }
+        ],
+        "/api/files"
+      );
+
+      expect(html).toContain('<section id="page-1">');
+      expect(html).not.toContain('<section id="page-0">');
     });
   });
 
-  // 8. Auth Service Tests
+  // 8. Cover Extraction Service Tests
+  describe("CoverExtractionService", () => {
+    it("should write a PNG first-page cover in mock test mode", async () => {
+      const tempPng = "temp_mock_cover.png";
+      await CoverExtractionService.extractPdfFirstPageCover("dummy.pdf", tempPng);
+
+      expect(fs.existsSync(tempPng)).toBe(true);
+      const content = fs.readFileSync(tempPng);
+      expect([...content.subarray(0, 8)]).toEqual([137, 80, 78, 71, 13, 10, 26, 10]);
+      fs.unlinkSync(tempPng);
+    });
+  });
+
+  // 9. EPUB Packager Tests
+  describe("EpubPackager", () => {
+    it("should map one-based TOC page anchors to zero-based generated XHTML files", () => {
+      const epubBuffer = EpubPackager.createEpub(
+        "book-id",
+        {
+          title: "Test Book",
+          authors: ["Author"],
+          language: "en",
+          isbnNumbers: [],
+          toc: {
+            entries: [{ title: "Start", level: 1, anchorId: "page-1" }]
+          }
+        },
+        [
+          { pageIndex: 0, markdown: "First page", images: [], tables: [] },
+          { pageIndex: 1, markdown: "Second page", images: [], tables: [] }
+        ],
+        [],
+        null
+      );
+
+      const zip = new AdmZip(epubBuffer);
+      const tocNcx = zip.readAsText("OEBPS/toc.ncx");
+      expect(tocNcx).toContain('<content src="xhtml/page-0.xhtml"/>');
+      expect(tocNcx).not.toContain('<content src="xhtml/page-1.xhtml"/>');
+    });
+  });
+
+  // 10. Auth Service Tests
   describe("AuthService", () => {
     it("should sign and verify JWT tokens cleanly", async () => {
       const auth = new AuthService();

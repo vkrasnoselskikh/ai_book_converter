@@ -372,6 +372,10 @@ app.get(
       if (fileName.endsWith(".png")) res.setHeader("Content-Type", "image/png");
       else if (fileName.endsWith(".jpg") || fileName.endsWith(".jpeg"))
         res.setHeader("Content-Type", "image/jpeg");
+      else if (fileName.endsWith(".webp"))
+        res.setHeader("Content-Type", "image/webp");
+      else if (fileName.endsWith(".gif"))
+        res.setHeader("Content-Type", "image/gif");
       else res.setHeader("Content-Type", "application/octet-stream");
 
       res.send(fileBuffer);
