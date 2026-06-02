@@ -393,6 +393,10 @@ export class BookProcessingService {
         const imgBuffer = decodeBase64Image(img.imageBase64);
         if (imgBuffer) {
           this.storageService.writeFile(bookId, "images", img.fileName, imgBuffer);
+        } else {
+          logger.error(
+            `Skipping OCR image without base64 payload: id=${img.id}, fileName=${img.fileName}`,
+          );
         }
       }
     }

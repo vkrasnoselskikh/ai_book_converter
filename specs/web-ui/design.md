@@ -313,6 +313,8 @@ Mistral OCR flow:
 7. "BookProcessingService" saves OCR images using their normalized "fileName"; preview and EPUB rendering use the same filename without adding a second extension.
 8. "CoverExtractionService" renders the first document page as "cover/cover.png" for PDF inputs and delegates DJVU first-page extraction to "DjvuConverter".
 9. If first-page rendering is unavailable, cover fallback order is: first OCR image on page 1, non-placeholder metadata-agent cover image, then no cover.
+10. "MistralOcrService" accepts both raw snake_case OCR fields and Mistral SDK camelCase OCR fields, including "image_base64"/"imageBase64" and image bounding-box coordinates.
+11. OCR requests set "includeImageBase64" and a high "imageLimit" so image payloads are returned for image-heavy books where supported by the provider.
 
 Metadata agent flow:
 

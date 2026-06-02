@@ -182,6 +182,10 @@ export class PreviewRenderService {
   ): string {
     let updated = markdown;
     for (const img of images) {
+      if (!img.imageBase64 && !img.source_path) {
+        continue;
+      }
+
       const imgName = img.source_path
         ? path.basename(img.source_path)
         : (img.fileName || `${img.id}.png`);

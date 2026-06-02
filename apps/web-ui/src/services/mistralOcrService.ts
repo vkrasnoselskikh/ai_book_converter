@@ -9,10 +9,15 @@ const logger = getLogger("mistralOcrService");
 export interface OcrImage {
   id: string;
   top_left_x?: number;
+  topLeftX?: number | null;
   top_left_y?: number;
+  topLeftY?: number | null;
   bottom_right_x?: number;
+  bottomRightX?: number | null;
   bottom_right_y?: number;
+  bottomRightY?: number | null;
   image_base64?: string;
+  imageBase64?: string | null;
 }
 
 export interface OcrTable {
@@ -86,26 +91,31 @@ export class MistralOcrService {
             fileName: path.basename(filePath),
             content: new Uint8Array(uploadFile),
           },
-          purpose: "ocr"
+          purpose: "ocr",
         });
 
         logger.info(`File uploaded to Mistral. ID: ${uploadResponse.id}`);
 
-        logger.info(`Starting Mistral OCR process using model: ${config.mistralOcrModel}`);
+        logger.info(
+          `Starting Mistral OCR process using model: ${config.mistralOcrModel}`,
+        );
         const ocrResponse = await this.client.ocr.process({
           model: config.mistralOcrModel,
           document: {
             type: "file",
-            fileId: uploadResponse.id
+            fileId: uploadResponse.id,
           },
           tableFormat: "html",
           includeImageBase64: true,
           extractHeader: true,
-          extractFooter: true
+          extractFooter: true,
         });
 
         // Parse response
-        rawOcrResult = typeof ocrResponse === "string" ? JSON.parse(ocrResponse) : ocrResponse;
+        rawOcrResult =
+          typeof ocrResponse === "string"
+            ? JSON.parse(ocrResponse)
+            : ocrResponse;
       } catch (err: any) {
         logger.error("Mistral OCR api failed, falling back or throwing: ", err);
         throw new Error(`Mistral OCR Service Error: ${getErrorMessage(err)}`);
@@ -118,12 +128,15 @@ export class MistralOcrService {
   // Normalize raw OCR pages into clean TypeScript objects
   normalizeOcrResponse(rawResponse: any): NormalizedPage[] {
     const rawPages: OcrPage[] = rawResponse.pages || [];
-    
+
     return rawPages.map((rawPage, pagePosition) => {
-      const pageIndex = typeof rawPage.index === "number" 
-        ? rawPage.index 
-        : (typeof rawPage.page_index === "number" ? rawPage.page_index : 0);
-      
+      const pageIndex =
+        typeof rawPage.index === "number"
+          ? rawPage.index
+          : typeof rawPage.page_index === "number"
+            ? rawPage.page_index
+            : 0;
+
       const pageNumber = pageIndex + 1;
       const anchorId = `page-${pageNumber}`;
 
@@ -147,24 +160,42 @@ export class MistralOcrService {
       const images = (rawPage.images || []).map((img, imagePosition) => {
         const fallbackId = `page-${pageNumber}-image-${imagePosition + 1}`;
         const id = img.id || fallbackId;
-        const mimeType = inferImageMimeType(img.image_base64);
-        const fileName = buildImageFileName(id, mimeType, pagePosition, imagePosition);
-        const width = Math.max(0, (img.bottom_right_x || 0) - (img.top_left_x || 0));
-        const height = Math.max(0, (img.bottom_right_y || 0) - (img.top_left_y || 0));
+        const imageBase64 = img.imageBase64 || img.image_base64 || undefined;
+        const mimeType = inferImageMimeType(imageBase64);
+        const fileName = buildImageFileName(
+          id,
+          mimeType,
+          pagePosition,
+          imagePosition,
+        );
+        const topLeftX = coalesceNumber(img.topLeftX, img.top_left_x, 0);
+        const topLeftY = coalesceNumber(img.topLeftY, img.top_left_y, 0);
+        const bottomRightX = coalesceNumber(
+          img.bottomRightX,
+          img.bottom_right_x,
+          0,
+        );
+        const bottomRightY = coalesceNumber(
+          img.bottomRightY,
+          img.bottom_right_y,
+          0,
+        );
+        const width = Math.max(0, bottomRightX - topLeftX);
+        const height = Math.max(0, bottomRightY - topLeftY);
         return {
           id,
           width: width || 400,
           height: height || 300,
-          imageBase64: img.image_base64,
+          imageBase64,
           fileName,
-          mimeType
+          mimeType,
         };
       });
 
       // Tables normalization
       const tables = (rawPage.tables || []).map((tbl) => ({
         id: tbl.id || `tbl-${Math.random().toString(36).substr(2, 9)}`,
-        contentHtml: tbl.content || ""
+        contentHtml: tbl.content || "",
       }));
 
       return {
@@ -175,7 +206,7 @@ export class MistralOcrService {
         images,
         tables,
         headers,
-        footers
+        footers,
       };
     });
   }
@@ -186,7 +217,8 @@ export class MistralOcrService {
       pages: [
         {
           index: 0,
-          markdown: "# Premium Artificial Intelligence\nThis is the cover or first page content of our premium book.\n![img1](img1)\nHere is some additional intro text.",
+          markdown:
+            "# Premium Artificial Intelligence\nThis is the cover or first page content of our premium book.\n![img1](img1)\nHere is some additional intro text.",
           images: [
             {
               id: "img1",
@@ -194,27 +226,30 @@ export class MistralOcrService {
               top_left_y: 10,
               bottom_right_x: 210,
               bottom_right_y: 160,
-              image_base64: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
-            }
+              image_base64:
+                "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+            },
           ],
           tables: [],
           headers: ["Artificial Intelligence: A Modern Guide"],
-          footers: ["[1] First footnote description."]
+          footers: ["[1] First footnote description."],
         },
         {
           index: 1,
-          markdown: "## Chapter 1: Introduction to Agents\nIn this chapter, we explore how autonomous agents can operate safely in complex environments.\n[tbl1](tbl1)\nThis table highlights system comparisons.\nAnd another sentence here.",
+          markdown:
+            "## Chapter 1: Introduction to Agents\nIn this chapter, we explore how autonomous agents can operate safely in complex environments.\n[tbl1](tbl1)\nThis table highlights system comparisons.\nAnd another sentence here.",
           images: [],
           tables: [
             {
               id: "tbl1",
-              content: "<table class='table'><tr><th>Model</th><th>Score</th></tr><tr><td>Mistral Large</td><td>95%</td></tr></table>"
-            }
+              content:
+                "<table class='table'><tr><th>Model</th><th>Score</th></tr><tr><td>Mistral Large</td><td>95%</td></tr></table>",
+            },
           ],
           headers: ["Chapter 1: Intro"],
-          footers: ["[2] Second footnote description."]
-        }
-      ]
+          footers: ["[2] Second footnote description."],
+        },
+      ],
     };
   }
 }
@@ -248,9 +283,13 @@ export function buildImageFileName(
   pagePosition: number,
   imagePosition: number,
 ): string {
-  const safeBaseName = sanitizeImageBaseName(id) || `page-${pagePosition + 1}-image-${imagePosition + 1}`;
+  const safeBaseName =
+    sanitizeImageBaseName(id) ||
+    `page-${pagePosition + 1}-image-${imagePosition + 1}`;
   const existingExt = safeBaseName.match(/\.(png|jpe?g|webp|gif)$/i)?.[0];
-  return existingExt ? safeBaseName : `${safeBaseName}${imageExtensionFromMimeType(mimeType)}`;
+  return existingExt
+    ? safeBaseName
+    : `${safeBaseName}${imageExtensionFromMimeType(mimeType)}`;
 }
 
 function sanitizeImageBaseName(id: string): string {
@@ -259,4 +298,18 @@ function sanitizeImageBaseName(id: string): string {
     .replace(/[^a-zA-Z0-9._-]/g, "_")
     .replace(/^\.+/, "")
     .slice(0, 120);
+}
+
+function coalesceNumber(
+  primary: number | null | undefined,
+  fallback: number | null | undefined,
+  defaultValue: number,
+): number {
+  if (typeof primary === "number") {
+    return primary;
+  }
+  if (typeof fallback === "number") {
+    return fallback;
+  }
+  return defaultValue;
 }

@@ -84,6 +84,40 @@ describe("AI Book Converter Web-UI Domain Services", () => {
       expect(normalized[0].images[0].mimeType).toBe("image/jpeg");
       expect(normalized[0].images[0].fileName).toBe("img_cover.jpg");
     });
+
+    it("should normalize live Mistral SDK OCR image fields", async () => {
+      const ocrService = new MistralOcrService();
+      const mockSdkResponse = {
+        pages: [
+          {
+            index: 0,
+            markdown: "Page image ![img-0.jpeg](img-0.jpeg)",
+            images: [
+              {
+                id: "img-0.jpeg",
+                topLeftX: 12,
+                topLeftY: 20,
+                bottomRightX: 212,
+                bottomRightY: 170,
+                imageBase64: "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2w=="
+              }
+            ],
+            tables: [],
+            headers: [],
+            footers: []
+          }
+        ]
+      };
+
+      const normalized = ocrService.normalizeOcrResponse(mockSdkResponse);
+
+      expect(normalized[0].images[0].id).toBe("img-0.jpeg");
+      expect(normalized[0].images[0].fileName).toBe("img-0.jpeg");
+      expect(normalized[0].images[0].mimeType).toBe("image/jpeg");
+      expect(normalized[0].images[0].imageBase64).toContain("data:image/jpeg;base64,");
+      expect(normalized[0].images[0].width).toBe(200);
+      expect(normalized[0].images[0].height).toBe(150);
+    });
   });
 
   // 4. Agent Service Tests
@@ -191,6 +225,7 @@ describe("AI Book Converter Web-UI Domain Services", () => {
                 id: "img/cover",
                 fileName: "img_cover.jpg",
                 mimeType: "image/jpeg",
+                imageBase64: "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2w==",
                 width: 400,
                 height: 300
               }
@@ -203,6 +238,59 @@ describe("AI Book Converter Web-UI Domain Services", () => {
 
       expect(html).toContain('src="/api/books/book-id/files/images/img_cover.jpg"');
       expect(html).toContain('<section id="page-1">');
+    });
+
+    it("should render live OCR image references with existing Mistral filenames", () => {
+      const html = PreviewRenderService.renderBodySections(
+        [
+          {
+            pageIndex: 0,
+            pageNumber: 1,
+            anchorId: "page-1",
+            markdown: "OCR image ![img-0.jpeg](img-0.jpeg)",
+            images: [
+              {
+                id: "img-0.jpeg",
+                fileName: "img-0.jpeg",
+                mimeType: "image/jpeg",
+                imageBase64: "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2w==",
+                width: 200,
+                height: 150
+              }
+            ],
+            tables: []
+          }
+        ],
+        "/api/books/book-id/files/images"
+      );
+
+      expect(html).toContain('src="/api/books/book-id/files/images/img-0.jpeg"');
+    });
+
+    it("should not render OCR image placeholders when base64 payload is missing", () => {
+      const html = PreviewRenderService.renderBodySections(
+        [
+          {
+            pageIndex: 0,
+            pageNumber: 1,
+            anchorId: "page-1",
+            markdown: "Missing image ![img-0.jpeg](img-0.jpeg)",
+            images: [
+              {
+                id: "img-0.jpeg",
+                fileName: "img-0.jpeg",
+                mimeType: "image/jpeg",
+                width: 200,
+                height: 150
+              }
+            ],
+            tables: []
+          }
+        ],
+        "/api/books/book-id/files/images"
+      );
+
+      expect(html).not.toContain("/api/books/book-id/files/images/img-0.jpeg");
     });
 
     it("should render one-based fallback page anchors when anchorId is absent", () => {
