@@ -1,4 +1,7 @@
 import React, { useState } from "react";
+import ReactMarkdown, { type Components } from "react-markdown";
+import rehypeRaw from "rehype-raw";
+import remarkGfm from "remark-gfm";
 
 interface TocEntry {
   title: string;
@@ -8,13 +11,32 @@ interface TocEntry {
 
 interface BookReaderProps {
   htmlContent: string;
+  markdownPages: PreviewMarkdownPage[];
+  endnotes: PreviewEndnote[];
   tocEntries: TocEntry[];
   title: string;
   authors: string[];
 }
 
+interface PreviewMarkdownPage {
+  pageIndex: number;
+  pageNumber?: number;
+  anchorId: string;
+  markdown: string;
+}
+
+interface PreviewEndnote {
+  noteId: string;
+  refId: string;
+  marker: string | null;
+  text: string;
+  linked: boolean;
+}
+
 export const BookReader: React.FC<BookReaderProps> = ({
   htmlContent,
+  markdownPages = [],
+  endnotes = [],
   tocEntries = [],
   title,
   authors
@@ -27,6 +49,57 @@ export const BookReader: React.FC<BookReaderProps> = ({
       window.history.replaceState(null, "", `#${anchorId}`);
       element.scrollIntoView({ behavior: "smooth", block: "start" });
     }
+  };
+
+  const handleAnchorClick = (
+    event: React.MouseEvent<HTMLAnchorElement>,
+    href: string | undefined,
+  ) => {
+    if (!href?.startsWith("#")) {
+      return;
+    }
+
+    event.preventDefault();
+    scrollToAnchor(href.slice(1));
+  };
+
+  const markdownComponents: Components = {
+    a({ href, children }) {
+      const isAnchor = href?.startsWith("#") || false;
+      return (
+        <a
+          href={href}
+          onClick={(event) => handleAnchorClick(event, href)}
+          target={isAnchor ? undefined : "_blank"}
+          rel={isAnchor ? undefined : "noopener noreferrer"}
+        >
+          {children}
+        </a>
+      );
+    },
+    img({ src, alt }) {
+      return (
+        <img
+          src={src || ""}
+          alt={alt || ""}
+          loading="lazy"
+          className="max-w-full rounded-md border border-base-content/10"
+        />
+      );
+    },
+    table({ children }) {
+      return (
+        <div className="my-6 overflow-x-auto">
+          <table className="table table-zebra w-full text-sm">{children}</table>
+        </div>
+      );
+    },
+    th({ children }) {
+      return <th className="bg-base-200 font-bold">{children}</th>;
+    },
+    td({ children }) {
+      return <td>{children}</td>;
+    },
   };
 
   return (
@@ -97,11 +170,51 @@ export const BookReader: React.FC<BookReaderProps> = ({
             </p>
           </div>
 
-          {/* Compiled HTML preview text */}
-          <article 
-            className="prose prose-base sm:prose-lg max-w-none text-left leading-relaxed text-base-content/90"
-            dangerouslySetInnerHTML={{ __html: htmlContent }}
-          />
+          <article className="prose prose-base sm:prose-lg max-w-none text-left leading-relaxed text-base-content/90">
+            {markdownPages.length > 0 ? (
+              <>
+                {markdownPages.map((page) => (
+                  <section id={page.anchorId} key={page.anchorId || page.pageIndex}>
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      rehypePlugins={[rehypeRaw]}
+                      components={markdownComponents}
+                    >
+                      {page.markdown}
+                    </ReactMarkdown>
+                  </section>
+                ))}
+                {endnotes.length > 0 && (
+                  <section id="endnotes">
+                    <h2>Endnotes</h2>
+                    <ol>
+                      {endnotes.map((endnote) => (
+                        <li id={endnote.noteId} key={endnote.noteId}>
+                          {endnote.marker !== null ? `[${endnote.marker}] ` : ""}
+                          {endnote.text}
+                          {endnote.linked && (
+                            <>
+                              {" "}
+                              <a
+                                href={`#${endnote.refId}`}
+                                onClick={(event) =>
+                                  handleAnchorClick(event, `#${endnote.refId}`)
+                                }
+                              >
+                                ↩
+                              </a>
+                            </>
+                          )}
+                        </li>
+                      ))}
+                    </ol>
+                  </section>
+                )}
+              </>
+            ) : (
+              <div dangerouslySetInnerHTML={{ __html: htmlContent }} />
+            )}
+          </article>
         </div>
       </main>
     </div>

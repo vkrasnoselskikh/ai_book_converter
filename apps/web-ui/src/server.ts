@@ -14,6 +14,7 @@ import { AccountLinkingService } from "./services/accountLinkingService.js";
 import { BookStorageService } from "./services/bookStorageService.js";
 import { BookProcessingService } from "./services/bookProcessingService.js";
 import { EpubPackager } from "./services/epubPackager.js";
+import { PreviewRenderService } from "./services/previewRenderService.js";
 import { getLogger } from "./utils/logger.js";
 
 const logger = getLogger("server");
@@ -100,7 +101,7 @@ app.get("/api/session", async (req: any, res) => {
         status: b.status,
       })),
     });
-  } catch (err: any) {
+  } catch {
     res.status(500).json({ error: "Failed to load session details" });
   }
 });
@@ -307,7 +308,7 @@ app.put(
   },
 );
 
-// 8. Get preview HTML representation
+// 8. Get preview representation
 app.get("/api/books/:bookId/preview", async (req: any, res) => {
   const { bookId } = req.params;
 
@@ -321,8 +322,63 @@ app.get("/api/books/:bookId/preview", async (req: any, res) => {
     const contentHtml = storageService
       .readFile(bookId, "preview", "content.html")
       .toString("utf-8");
-    res.json({ htmlContent: contentHtml });
-  } catch (err: any) {
+
+    let markdownPages: ReturnType<typeof PreviewRenderService.renderMarkdownPages> = [];
+    let markdownContent = "";
+    let endnotes = [];
+
+    try {
+      const pages = JSON.parse(
+        storageService
+          .readFile(bookId, "preview", "pages.json")
+          .toString("utf-8"),
+      );
+
+      if (
+        Array.isArray(pages) &&
+        pages.some((page) => typeof page.markdown === "string")
+      ) {
+        let hasMarkdownPreviewArtifacts = false;
+
+        try {
+          endnotes = JSON.parse(
+            storageService
+              .readFile(bookId, "preview", "endnotes.json")
+              .toString("utf-8"),
+          );
+          hasMarkdownPreviewArtifacts = true;
+        } catch {
+          endnotes = [];
+        }
+
+        try {
+          markdownContent = storageService
+            .readFile(bookId, "preview", "content.md")
+            .toString("utf-8");
+          hasMarkdownPreviewArtifacts = true;
+        } catch {
+          markdownContent = "";
+        }
+
+        if (hasMarkdownPreviewArtifacts) {
+          markdownPages = PreviewRenderService.renderMarkdownPages(
+            pages,
+            `/api/books/${bookId}/files/images`,
+          );
+          if (!markdownContent) {
+            markdownContent = PreviewRenderService.renderBookMarkdown(
+              markdownPages,
+              endnotes,
+            );
+          }
+        }
+      }
+    } catch {
+      markdownPages = [];
+    }
+
+    res.json({ htmlContent: contentHtml, markdownContent, markdownPages, endnotes });
+  } catch {
     res.status(500).json({ error: "Failed to read preview content" });
   }
 });
@@ -377,7 +433,7 @@ app.get(
       else res.setHeader("Content-Type", "application/octet-stream");
 
       res.send(fileBuffer);
-    } catch (err) {
+    } catch {
       res.status(404).json({ error: "File not found" });
     }
   },

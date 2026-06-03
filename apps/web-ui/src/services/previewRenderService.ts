@@ -32,15 +32,22 @@ export interface PreviewEndnote {
   linked: boolean;
 }
 
+export interface PreviewMarkdownPage {
+  pageIndex: number;
+  pageNumber?: number;
+  anchorId: string;
+  markdown: string;
+}
+
 export class PreviewRenderService {
   // Simple markdown to HTML compiler
   static compileMarkdown(markdown: string): string {
-    let html = markdown.trim();
+    const html = markdown.trim();
 
     // 1. Double newlines to paragraphs
     const paragraphs = html.split(/\n\n+/);
     const compiledParagraphs = paragraphs.map((p) => {
-      let text = p.trim();
+      const text = p.trim();
       if (!text) return "";
 
       // Headers
@@ -130,6 +137,62 @@ export class PreviewRenderService {
     return renderedSections.join("\n\n");
   }
 
+  // Prepares OCR markdown for client-side ReactMarkdown rendering.
+  static renderMarkdownPages(
+    pages: PreviewPage[],
+    imageHrefPrefix: string,
+  ): PreviewMarkdownPage[] {
+    return pages.map((page) => {
+      let pageMarkdown = this.replaceTablePlaceholders(
+        page.markdown,
+        page.tables,
+      );
+      pageMarkdown = this.replaceImagePlaceholders(
+        pageMarkdown,
+        page.images,
+        imageHrefPrefix,
+      );
+      pageMarkdown = this.normalizeMarkdownImageSources(
+        pageMarkdown,
+        imageHrefPrefix,
+      );
+
+      return {
+        pageIndex: page.pageIndex,
+        pageNumber: page.pageNumber,
+        anchorId:
+          page.anchorId ||
+          (page.pageNumber ? `page-${page.pageNumber}` : `page-${page.pageIndex + 1}`),
+        markdown: pageMarkdown.trim(),
+      };
+    });
+  }
+
+  static renderBookMarkdown(
+    pages: PreviewMarkdownPage[],
+    endnotes: PreviewEndnote[],
+  ): string {
+    const pageMarkdown = pages
+      .map((page) => `<section id="${page.anchorId}">\n\n${page.markdown}\n\n</section>`)
+      .join("\n\n");
+    const endnotesMarkdown = this.renderEndnotesMarkdown(endnotes);
+    return [pageMarkdown, endnotesMarkdown].filter(Boolean).join("\n\n");
+  }
+
+  static renderEndnotesMarkdown(endnotes: PreviewEndnote[]): string {
+    if (!endnotes || endnotes.length === 0) {
+      return "";
+    }
+
+    const lines = ["## Endnotes", ""];
+    for (const endnote of endnotes) {
+      const backlink = endnote.linked ? ` [↩](#${endnote.refId})` : "";
+      const marker = endnote.marker !== null ? `[${endnote.marker}] ` : "";
+      lines.push(`- <span id="${endnote.noteId}"></span>${marker}${endnote.text}${backlink}`);
+    }
+    return lines.join("\n");
+  }
+
   // Renders standard endnotes HTML section
   static renderEndnotesHtml(endnotes: PreviewEndnote[]): string {
     if (!endnotes || endnotes.length === 0) {
@@ -212,6 +275,20 @@ export class PreviewRenderService {
       return normalized;
     }
     return normalized.replace(/src="images\//g, `src="${imageHrefPrefix}/`);
+  }
+
+  static normalizeMarkdownImageSources(
+    markdown: string,
+    imageHrefPrefix: string,
+  ): string {
+    const normalized = markdown.replace(/!\[([^\]]*)\]\(\.\.\/([^)]+)\)/g, "![$1]($2)");
+    if (imageHrefPrefix === "../images") {
+      return normalized;
+    }
+    return normalized.replace(
+      /!\[([^\]]*)\]\(images\/([^)]+)\)/g,
+      `![$1](${imageHrefPrefix}/$2)`,
+    );
   }
 
   private static escapeRegExp(value: string): string {

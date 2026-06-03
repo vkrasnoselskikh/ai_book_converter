@@ -16,7 +16,7 @@ const __dirname = path.dirname(__filename);
 const dbPath = process.env.DATABASE_PATH || path.resolve(__dirname, "../../db.sqlite");
 
 export const AppDataSource = new DataSource({
-  type: "sqlite",
+  type: "better-sqlite3",
   database: dbPath,
   synchronize: true, // Auto-create tables for development
   logging: false,

@@ -9,7 +9,7 @@ export class UserRepository {
   async findById(id: string): Promise<User | null> {
     return this.repo.findOne({
       where: { id },
-      relations: ["identities"],
+      relations: { identities: true },
     });
   }
 
@@ -17,7 +17,7 @@ export class UserRepository {
   async findByIdentity(provider: "google" | "facebook" | "telegram", providerSubject: string): Promise<User | null> {
     const identity = await this.identityRepo.findOne({
       where: { provider, providerSubject },
-      relations: ["user"],
+      relations: { user: true },
     });
     if (!identity) return null;
     return identity.user;

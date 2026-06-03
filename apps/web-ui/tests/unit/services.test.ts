@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeAll } from "vitest";
+import { describe, it, expect, beforeAll } from "vitest";
 import fs from "fs";
 import os from "os";
 import path from "path";
@@ -212,6 +212,44 @@ describe("AI Book Converter Web-UI Domain Services", () => {
       expect(html).toContain('src="/api/files/cover.png"');
       expect(html).toContain('<section id="page-1">');
       expect(html).toContain("<table><tr><td>Cell</td></tr></table>");
+    });
+
+    it("should prepare OCR markdown pages for ReactMarkdown preview rendering", () => {
+      const md = "Here is ![img-1](img-1)\n\n[tbl-1](tbl-1)";
+      const pages = [
+        {
+          pageIndex: 0,
+          pageNumber: 1,
+          anchorId: "page-1",
+          markdown: md,
+          images: [{ id: "img-1", width: 400, height: 300, source_path: "cover.png" }],
+          tables: [{ id: "tbl-1", contentHtml: "<table><tr><td>Cell</td></tr></table>" }]
+        }
+      ];
+
+      const markdownPages = PreviewRenderService.renderMarkdownPages(
+        pages,
+        "/api/files",
+      );
+      const bookMarkdown = PreviewRenderService.renderBookMarkdown(
+        markdownPages,
+        [
+          {
+            noteId: "endnote-1",
+            refId: "endnote-ref-1",
+            marker: "1",
+            text: "Footnote text.",
+            linked: true
+          }
+        ],
+      );
+
+      expect(markdownPages[0].anchorId).toBe("page-1");
+      expect(markdownPages[0].markdown).toContain("![img-1](/api/files/cover.png)");
+      expect(markdownPages[0].markdown).toContain("<table><tr><td>Cell</td></tr></table>");
+      expect(bookMarkdown).toContain('<section id="page-1">');
+      expect(bookMarkdown).toContain("## Endnotes");
+      expect(bookMarkdown).toContain("[↩](#endnote-ref-1)");
     });
 
     it("should render OCR images using the normalized saved filename", () => {

@@ -13,7 +13,7 @@ export class BookRepository {
   async findById(id: string): Promise<Book | null> {
     return this.repo.findOne({
       where: { id },
-      relations: ["metadata"],
+      relations: { metadata: true },
     });
   }
 
@@ -42,7 +42,7 @@ export class BookRepository {
   async findAllBySession(sessionId: string): Promise<Book[]> {
     const links = await this.sessionBookRepo.find({
       where: { sessionId },
-      relations: ["book", "book.metadata"],
+      relations: { book: { metadata: true } },
     });
     return links.map((l) => l.book);
   }
@@ -51,7 +51,7 @@ export class BookRepository {
   async findAllByUser(userId: string): Promise<Book[]> {
     const links = await this.userBookRepo.find({
       where: { userId },
-      relations: ["book", "book.metadata"],
+      relations: { book: { metadata: true } },
     });
     return links.map((l) => l.book);
   }

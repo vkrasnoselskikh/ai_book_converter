@@ -146,8 +146,16 @@ export class BookProcessingService {
       EndnoteService.buildEndnotes(normalizedPages);
 
     // 7. Prepare preview representation
-    logger.info("Compiling preview markdown to HTML sections...");
+    logger.info("Preparing preview markdown and legacy HTML sections...");
     const imagePrefix = `/api/books/${bookId}/files/images`;
+    const markdownPages = PreviewRenderService.renderMarkdownPages(
+      rewrittenPages,
+      imagePrefix,
+    );
+    const fullMarkdown = PreviewRenderService.renderBookMarkdown(
+      markdownPages,
+      endnotes,
+    );
     const bodyHtml = PreviewRenderService.renderBodySections(
       rewrittenPages,
       imagePrefix,
@@ -160,11 +168,18 @@ export class BookProcessingService {
 
     // Save final artifacts
     this.storageService.writeFile(bookId, "preview", "content.html", fullHtml);
+    this.storageService.writeFile(bookId, "preview", "content.md", fullMarkdown);
     this.storageService.writeFile(
       bookId,
       "preview",
       "pages.json",
       JSON.stringify(rewrittenPages),
+    );
+    this.storageService.writeFile(
+      bookId,
+      "preview",
+      "endnotes.json",
+      JSON.stringify(endnotes),
     );
     this.storageService.writeFile(
       bookId,
@@ -342,8 +357,16 @@ export class BookProcessingService {
       EndnoteService.buildEndnotes(normalizedPages);
 
     // 9. Prepare preview representation
-    logger.info("Compiling preview markdown to HTML sections...");
+    logger.info("Preparing preview markdown and legacy HTML sections...");
     const imagePrefix = `/api/books/${bookId}/files/images`; // serve from server API
+    const markdownPages = PreviewRenderService.renderMarkdownPages(
+      rewrittenPages,
+      imagePrefix,
+    );
+    const fullMarkdown = PreviewRenderService.renderBookMarkdown(
+      markdownPages,
+      endnotes,
+    );
     const bodyHtml = PreviewRenderService.renderBodySections(
       rewrittenPages,
       imagePrefix,
@@ -356,11 +379,18 @@ export class BookProcessingService {
 
     // Save final artifacts
     this.storageService.writeFile(bookId, "preview", "content.html", fullHtml);
+    this.storageService.writeFile(bookId, "preview", "content.md", fullMarkdown);
     this.storageService.writeFile(
       bookId,
       "preview",
       "pages.json",
       JSON.stringify(rewrittenPages),
+    );
+    this.storageService.writeFile(
+      bookId,
+      "preview",
+      "endnotes.json",
+      JSON.stringify(endnotes),
     );
     this.storageService.writeFile(
       bookId,

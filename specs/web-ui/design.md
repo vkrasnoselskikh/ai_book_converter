@@ -2,7 +2,7 @@
 
 ## Overview
 
-The web application is located in "apps/web-ui" and consists of a React TypeScript application, a Node.js TypeScript backend, React server-side rendering, and a TypeORM storage layer using the Data Mapper pattern. The first version uses SQLite, but the schema and repository layer must be prepared for replacing the driver with Postgres without rewriting domain logic.
+The web application is located in "apps/web-ui" and consists of a React TypeScript application, a Node.js TypeScript backend, React server-side rendering, and a TypeORM storage layer using the Data Mapper pattern. The first version uses SQLite through the "better-sqlite3" TypeORM driver, but the schema and repository layer must be prepared for replacing the driver with Postgres without rewriting domain logic.
 
 
 ## Frontend Architecture
@@ -19,7 +19,7 @@ Main components:
 - "BookUploadPanel" - EPUB and DJVU upload, submit state, and format errors.
 - "BookMetadataPanel" - metadata display and editing.
 - "BookCoverEditor" - current cover preview and replacement upload.
-- "BookReader" - processed book content preview.
+- "BookReader" - processed book content preview rendered through "ReactMarkdown" for Mistral OCR markdown pages, with a legacy HTML fallback for EPUB preview content.
 - "ProcessingStatus" - processing state and diagnostic messages.
 
 Styling uses daisyUI version > "5.5.19" through CSS. The day theme must use "emerald", and the night theme must use "forest". Theme switching must be implemented through the theme attribute on the root HTML element or an equivalent daisyUI mechanism.
@@ -58,7 +58,7 @@ Recommended server modules:
 - "routes/metadataRoutes.ts" - metadata routes.
 - "routes/coverRoutes.ts" - cover routes.
 - "config/appConfig.ts" - application configuration.
-- "database/dataSource.ts" - TypeORM setup.
+- "database/dataSource.ts" - TypeORM setup using the "better-sqlite3" driver for the local SQLite database.
 - "repositories/*Repository.ts" - Data Mapper repositories.
 - "services/sessionService.ts" - anonymous session creation and validation.
 - "services/authService.ts" - external identity resolution and account creation.
@@ -87,7 +87,7 @@ Minimum HTTP route set:
 - "GET /api/books/:bookId" - get book, status, and metadata.
 - "PATCH /api/books/:bookId/metadata" - update metadata.
 - "PUT /api/books/:bookId/cover" - replace cover.
-- "GET /api/books/:bookId/preview" - get prepared preview content.
+- "GET /api/books/:bookId/preview" - get prepared preview content, including structured markdown pages for OCR books and legacy HTML content for fallback rendering.
 - "GET /api/books/:bookId/files/:fileName" - serve allowed book files, such as covers or preview images.
 
 Routes must return structured errors without exposing internal paths, secrets, or stack traces.
@@ -281,7 +281,7 @@ Logic from "src/ai_book_converter" is ported into TypeScript domain services:
 - "MetadataExtractionService" - reads or prepares metadata and cover data.
 - "ContentNormalizationService" - normalizes pages, blocks, tables, images, and warnings.
 - "EndnoteService" - moves footer notes into readable form and preserves unmatched notes.
-- "PreviewRenderService" - prepares HTML or structured preview data for "BookReader".
+- "PreviewRenderService" - prepares structured markdown preview data for "BookReader" and keeps legacy HTML compilation for EPUB packaging and fallback preview rendering.
 
 
 ## OCR and LLM Extraction Flow
@@ -292,7 +292,7 @@ Mistral OCR flow:
 2. The OCR request must include image base64 extraction, table HTML extraction, header extraction, and footer extraction where supported by the selected Mistral OCR client.
 3. The service normalizes every OCR page into an internal page object with both zero-based "pageIndex" and one-based "pageNumber".
 4. The service assigns "anchorId" to every page using the stable "page-<pageNumber>" format.
-5. Preview rendering writes the anchor into the page HTML so links can target the original page position.
+5. Preview rendering returns each OCR page as a structured markdown page with an anchor identifier so "BookReader" can render it through "ReactMarkdown" while preserving original page targets.
 6. "MistralOcrService" normalizes OCR images with stable "fileName" and "mimeType" fields derived from the image identifier and base64 data URI.
 7. "BookProcessingService" saves OCR images using their normalized "fileName"; preview and EPUB rendering use the same filename without adding a second extension.
 8. "CoverExtractionService" renders the first document page as "cover/cover.png" for PDF inputs and delegates DJVU first-page extraction to "DjvuConverter".
@@ -411,7 +411,7 @@ Each error must have:
 - `apps/web-ui/tests/unit/test_cover_service.ts` - verifies cover replacement.
 - `apps/web-ui/tests/unit/test_content_normalization_service.ts` - verifies portable normalization rules.
 - `apps/web-ui/tests/unit/test_endnote_service.ts` - verifies footnotes and unmatched footnotes.
-- `apps/web-ui/tests/unit/test_preview_render_service.ts` - verifies HTML preview.
+- `apps/web-ui/tests/unit/test_preview_render_service.ts` - verifies structured markdown preview preparation and legacy HTML preview.
 - `apps/web-ui/tests/unit/test_ssr.tsx` - verifies first-screen server-side rendering.
 - `apps/web-ui/tests/unit/test_book_url_builder.ts` - verifies canonical book processing URLs.
 - `apps/web-ui/tests/unit/test_header_state.tsx` - verifies header state for empty and selected books.

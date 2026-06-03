@@ -6,7 +6,7 @@ import { BookReader } from "./BookReader.jsx";
 interface Book {
   id: string;
   originalFileName: string;
-  sourceFormat: "epub" | "djvu";
+  sourceFormat: "epub" | "djvu" | "pdf";
   status: "uploaded" | "processing" | "ready" | "failed";
   statusMessage?: string | null;
   metadata?: {
@@ -18,6 +18,21 @@ interface Book {
     coverPath: string | null;
     toc?: { entries: any[] };
   } | null;
+}
+
+interface PreviewMarkdownPage {
+  pageIndex: number;
+  pageNumber?: number;
+  anchorId: string;
+  markdown: string;
+}
+
+interface PreviewEndnote {
+  noteId: string;
+  refId: string;
+  marker: string | null;
+  text: string;
+  linked: boolean;
 }
 
 interface InitialState {
@@ -67,6 +82,8 @@ export const App: React.FC<{ initialState?: InitialState }> = ({
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [htmlContent, setHtmlContent] = useState<string>("");
+  const [markdownPages, setMarkdownPages] = useState<PreviewMarkdownPage[]>([]);
+  const [endnotes, setEndnotes] = useState<PreviewEndnote[]>([]);
   const [activeTab, setActiveTab] = useState<"reader" | "metadata">("reader");
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
@@ -90,17 +107,23 @@ export const App: React.FC<{ initialState?: InitialState }> = ({
     }
   }, [currentBook]);
 
-  // Load preview HTML content once book is ready
+  // Load preview content once book is ready
   useEffect(() => {
     if (currentBook?.status === "ready") {
       fetch(`/api/books/${currentBook.id}/preview`)
         .then((res) => res.json())
         .then((data) => {
-          if (data.htmlContent) setHtmlContent(data.htmlContent);
+          setHtmlContent(data.htmlContent || "");
+          setMarkdownPages(
+            Array.isArray(data.markdownPages) ? data.markdownPages : [],
+          );
+          setEndnotes(Array.isArray(data.endnotes) ? data.endnotes : []);
         })
         .catch((err) => console.error("Failed to load preview:", err));
     } else {
       setHtmlContent("");
+      setMarkdownPages([]);
+      setEndnotes([]);
     }
   }, [currentBook?.id, currentBook?.status]);
 
@@ -453,6 +476,8 @@ export const App: React.FC<{ initialState?: InitialState }> = ({
               {activeTab === "reader" ? (
                 <BookReader
                   htmlContent={htmlContent}
+                  markdownPages={markdownPages}
+                  endnotes={endnotes}
                   tocEntries={currentBook.metadata?.toc?.entries || []}
                   title={
                     currentBook.metadata?.title || currentBook.originalFileName

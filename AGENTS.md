@@ -33,8 +33,8 @@ To do this, perform all necessary diagnostics for plan creation: run tests / exe
 3. Run:
 
 ```bash
-make lint
-make test
+npm run lint
+npm run test
 ```
 
 ### Report
