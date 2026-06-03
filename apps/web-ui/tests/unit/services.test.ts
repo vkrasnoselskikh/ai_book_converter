@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeAll } from "vitest";
 import fs from "fs";
+import os from "os";
 import path from "path";
 import { EpubExtractor } from "../../src/services/epubExtractor.js";
 import { DjvuConverter } from "../../src/services/djvuConverter.js";
@@ -11,6 +12,7 @@ import { PreviewRenderService } from "../../src/services/previewRenderService.js
 import { AuthService } from "../../src/services/authService.js";
 import { CoverExtractionService } from "../../src/services/coverExtractionService.js";
 import { EpubPackager } from "../../src/services/epubPackager.js";
+import { BookStorageService } from "../../src/services/bookStorageService.js";
 import { initializeDatabase } from "../../src/database/dataSource.js";
 import AdmZip from "adm-zip";
 
@@ -325,7 +327,36 @@ describe("AI Book Converter Web-UI Domain Services", () => {
     });
   });
 
-  // 9. EPUB Packager Tests
+  // 9. Book Storage Service Tests
+  describe("BookStorageService", () => {
+    it("should move source uploads into the configured books directory", () => {
+      const booksRoot = fs.mkdtempSync(path.join(os.tmpdir(), "books-root-"));
+      const uploadsRoot = fs.mkdtempSync(path.join(os.tmpdir(), "uploads-root-"));
+      const tempUploadPath = path.join(uploadsRoot, "upload.tmp");
+
+      try {
+        fs.writeFileSync(tempUploadPath, "book content");
+        const storage = new BookStorageService(booksRoot);
+
+        const storedPath = storage.moveFile(
+          "book-id",
+          "source",
+          "original.epub",
+          tempUploadPath,
+        );
+
+        expect(storedPath).toBe(path.join(booksRoot, "book-id", "source", "original.epub"));
+        expect(fs.existsSync(storedPath)).toBe(true);
+        expect(fs.readFileSync(storedPath, "utf-8")).toBe("book content");
+        expect(fs.existsSync(tempUploadPath)).toBe(false);
+      } finally {
+        fs.rmSync(booksRoot, { recursive: true, force: true });
+        fs.rmSync(uploadsRoot, { recursive: true, force: true });
+      }
+    });
+  });
+
+  // 10. EPUB Packager Tests
   describe("EpubPackager", () => {
     it("should map one-based TOC page anchors to zero-based generated XHTML files", () => {
       const epubBuffer = EpubPackager.createEpub(
@@ -354,7 +385,7 @@ describe("AI Book Converter Web-UI Domain Services", () => {
     });
   });
 
-  // 10. Auth Service Tests
+  // 11. Auth Service Tests
   describe("AuthService", () => {
     it("should sign and verify JWT tokens cleanly", async () => {
       const auth = new AuthService();

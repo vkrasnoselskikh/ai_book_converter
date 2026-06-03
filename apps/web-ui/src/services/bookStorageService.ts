@@ -3,9 +3,10 @@ import path from "path";
 import { config } from "../config/appConfig.js";
 
 export class BookStorageService {
-  private baseBooksPath = config.booksPath;
+  private baseBooksPath: string;
 
-  constructor() {
+  constructor(baseBooksPath = config.booksPath) {
+    this.baseBooksPath = path.resolve(baseBooksPath);
     if (!fs.existsSync(this.baseBooksPath)) {
       fs.mkdirSync(this.baseBooksPath, { recursive: true });
     }
@@ -43,6 +44,31 @@ export class BookStorageService {
     return targetFilePath;
   }
 
+  // Move an existing file inside book subfolder without loading it into memory
+  moveFile(bookId: string, subFolder: string, fileName: string, sourcePath: string): string {
+    const bookDir = this.ensureBookDir(bookId);
+    const targetFolder = path.join(bookDir, subFolder);
+
+    if (!fs.existsSync(targetFolder)) {
+      fs.mkdirSync(targetFolder, { recursive: true });
+    }
+
+    const targetFilePath = path.join(targetFolder, fileName);
+    this.ensureSafePath(targetFilePath);
+
+    try {
+      fs.renameSync(sourcePath, targetFilePath);
+    } catch (err: any) {
+      if (err?.code !== "EXDEV") {
+        throw err;
+      }
+      fs.copyFileSync(sourcePath, targetFilePath);
+      fs.unlinkSync(sourcePath);
+    }
+
+    return targetFilePath;
+  }
+
   // Read file inside book subfolder
   readFile(bookId: string, subFolder: string, fileName: string): Buffer {
     const bookDir = this.getBookDir(bookId);
@@ -70,7 +96,10 @@ export class BookStorageService {
   // Prevent path traversal attacks
   private ensureSafePath(targetPath: string) {
     const resolvedPath = path.resolve(targetPath);
-    if (!resolvedPath.startsWith(this.baseBooksPath)) {
+    if (
+      resolvedPath !== this.baseBooksPath &&
+      !resolvedPath.startsWith(this.baseBooksPath + path.sep)
+    ) {
       throw new Error("Path traversal restriction violated: target is outside books directory");
     }
   }

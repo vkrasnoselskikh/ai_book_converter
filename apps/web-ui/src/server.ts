@@ -189,15 +189,13 @@ app.post("/api/books", upload.single("book"), async (req: any, res) => {
     const book = await bookRepo.create(originalname, sourceFormat, "");
 
     // Secure books directories
-    storageService.ensureBookDir(book.id);
     const targetFileName = `original${suffix}`;
-    const destinationPath = fileURLToPath(
-      new URL(`../books/${book.id}/source/${targetFileName}`, import.meta.url),
+    const destinationPath = storageService.moveFile(
+      book.id,
+      "source",
+      targetFileName,
+      tempPath,
     );
-
-    // Ensure parents
-    fs.mkdirSync(path.dirname(destinationPath), { recursive: true });
-    fs.renameSync(tempPath, destinationPath);
 
     // Save actual storage path
     book.storagePath = destinationPath;
