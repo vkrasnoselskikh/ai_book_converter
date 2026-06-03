@@ -281,7 +281,7 @@ Logic from "src/ai_book_converter" is ported into TypeScript domain services:
 - "MetadataAgentService" - runs the metadata extraction agent through "@openai/agents".
 - "TableOfContentsAgentService" - runs the table-of-contents extraction agent through "@openai/agents".
 - "MetadataExtractionService" - reads or prepares metadata and cover data.
-- "ContentNormalizationService" - normalizes pages, blocks, tables, images, and warnings.
+- "ContentNormalizationService" - strips OCR boundary header and footer blocks, finds fenced code blocks, formats supported languages with "ruff" or "prettier" before markdown rendering, and preserves the original code block when formatting fails.
 - "EndnoteService" - moves footer notes into readable form and preserves unmatched notes.
 - "PreviewRenderService" - prepares structured markdown preview data for "BookReader" and keeps legacy HTML compilation only for fallback preview rendering.
 - "EpubMarkdownRenderService" - renders OCR markdown to server-side EPUB body XHTML with "MarkdownAsync", "remark-gfm", and "rehype-raw" so lists, tables, code blocks, blockquotes, links, images, and inline formatting are preserved.
@@ -293,15 +293,16 @@ Mistral OCR flow:
 
 1. "MistralOcrService" uploads the source PDF or DJVU-derived document to Mistral using the TypeScript implementation of the current JS live OCR behavior.
 2. The OCR request must include image base64 extraction, table HTML extraction, header extraction, and footer extraction where supported by the selected Mistral OCR client.
-3. The service normalizes every OCR page into an internal page object with both zero-based "pageIndex" and one-based "pageNumber".
-4. The service assigns "anchorId" to every page using the stable "page-<pageNumber>" format.
-5. Preview rendering returns each OCR page as a structured markdown page with an anchor identifier so "BookReader" can render it through "ReactMarkdown" while preserving original page targets.
-6. "MistralOcrService" normalizes OCR images with stable "fileName" and "mimeType" fields derived from the image identifier and base64 data URI.
-7. "BookProcessingService" saves OCR images using their normalized "fileName"; preview and EPUB rendering use the same filename without adding a second extension.
-8. "CoverExtractionService" renders the first document page as "cover/cover.png" for PDF inputs and delegates DJVU first-page extraction to "DjvuConverter".
-9. If first-page rendering is unavailable, cover fallback order is: first OCR image on page 1, non-placeholder metadata-agent cover image, then no cover.
-10. "MistralOcrService" accepts both raw snake_case OCR fields and Mistral SDK camelCase OCR fields, including "image_base64"/"imageBase64" and image bounding-box coordinates.
-11. OCR requests set "includeImageBase64" and a high "imageLimit" so image payloads are returned for image-heavy books where supported by the provider.
+3. The service returns both the raw OCR payload and normalized pages so "BookProcessingService" can save "processing/raw_payload.json" before any content normalization.
+4. The service normalizes every OCR page into an internal page object with both zero-based "pageIndex" and one-based "pageNumber".
+5. The service assigns "anchorId" to every page using the stable "page-<pageNumber>" format.
+6. Preview rendering returns each OCR page as a structured markdown page with an anchor identifier so "BookReader" can render it through "ReactMarkdown" while preserving original page targets.
+7. "MistralOcrService" normalizes OCR images with stable "fileName" and "mimeType" fields derived from the image identifier and base64 data URI.
+8. "BookProcessingService" saves OCR images using their normalized "fileName"; preview and EPUB rendering use the same filename without adding a second extension.
+9. "CoverExtractionService" renders the first document page as "cover/cover.png" for PDF inputs and delegates DJVU first-page extraction to "DjvuConverter".
+10. If first-page rendering is unavailable, cover fallback order is: first OCR image on page 1, non-placeholder metadata-agent cover image, then no cover.
+11. "MistralOcrService" accepts both raw snake_case OCR fields and Mistral SDK camelCase OCR fields, including "image_base64"/"imageBase64" and image bounding-box coordinates.
+12. OCR requests set "includeImageBase64" and a high "imageLimit" so image payloads are returned for image-heavy books where supported by the provider.
 
 Metadata agent flow:
 
@@ -338,6 +339,7 @@ Table-of-contents agent flow:
 11. "BookProcessingService" validates table-of-contents anchors against the remaining recognized one-based page anchors and falls back to the nearest available page anchor when needed.
 12. EPUB download navigation maps "page-1" to the first generated OCR XHTML page, preserving the one-based preview anchor contract.
 13. "EpubPackager" renders OCR markdown pages asynchronously through "EpubMarkdownRenderService" before writing generated XHTML files and does not use the legacy regex markdown compiler for EPUB output.
+14. "EpubPackager" writes EPUB stylesheet rules for "pre" and "pre code" so code blocks have a thin gray border, vertical spacing, padding, smaller text, scrollable overflow, and preserved non-wrapping whitespace.
 
 The table-of-contents extraction result has this shape:
 
@@ -428,7 +430,7 @@ Each error must have:
 - `apps/web-ui/tests/unit/test_table_of_contents_agent_service.ts` - verifies the first 20 pages produce anchor-based entries and a table-of-contents page range.
 - `apps/web-ui/tests/unit/test_metadata_service.ts` - verifies metadata reading and updating.
 - `apps/web-ui/tests/unit/test_cover_service.ts` - verifies cover replacement.
-- `apps/web-ui/tests/unit/test_content_normalization_service.ts` - verifies portable normalization rules.
+- `apps/web-ui/tests/unit/test_content_normalization_service.ts` - verifies OCR boundary block stripping, supported code block formatting, and formatting fallback behavior.
 - `apps/web-ui/tests/unit/test_endnote_service.ts` - verifies footnotes and unmatched footnotes.
 - `apps/web-ui/tests/unit/test_preview_render_service.ts` - verifies structured markdown preview preparation and legacy HTML preview.
 - `apps/web-ui/tests/unit/services.test.ts` - verifies TOC anchor normalization by target page numbers read from the table-of-contents text and EPUB markdown rendering for generated XHTML pages.

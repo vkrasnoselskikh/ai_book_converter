@@ -102,6 +102,22 @@ ul, ol {
 li {
   margin-bottom: 0.4em;
 }
+pre {
+  border: 1px solid #cccccc;
+  margin: 3rem 0;
+  padding: 1rem;
+  overflow: auto;
+  white-space: pre;
+  word-wrap: normal;
+  overflow-wrap: normal;
+  font-size: 0.85em;
+}
+pre code {
+  white-space: pre;
+  word-wrap: normal;
+  overflow-wrap: normal;
+  font-size: inherit;
+}
 `;
     zip.addFile("OEBPS/css/stylesheet.css", Buffer.from(stylesheetCss, "utf-8"));
 

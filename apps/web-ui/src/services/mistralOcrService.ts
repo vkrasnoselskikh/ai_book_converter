@@ -58,6 +58,11 @@ export interface NormalizedPage {
   footers: string[];
 }
 
+export interface OcrProcessingResult {
+  rawPayload: any;
+  pages: NormalizedPage[];
+}
+
 export class MistralOcrService {
   private client: Mistral | null = null;
 
@@ -73,6 +78,13 @@ export class MistralOcrService {
 
   // Primary method to process PDF/documents
   async processDocument(filePath: string): Promise<NormalizedPage[]> {
+    const result = await this.processDocumentWithRawPayload(filePath);
+    return result.pages;
+  }
+
+  async processDocumentWithRawPayload(
+    filePath: string,
+  ): Promise<OcrProcessingResult> {
     if (!fs.existsSync(filePath)) {
       throw new Error(`File not found for OCR: ${filePath}`);
     }
@@ -122,7 +134,10 @@ export class MistralOcrService {
       }
     }
 
-    return this.normalizeOcrResponse(rawOcrResult);
+    return {
+      rawPayload: rawOcrResult,
+      pages: this.normalizeOcrResponse(rawOcrResult),
+    };
   }
 
   // Normalize raw OCR pages into clean TypeScript objects

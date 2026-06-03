@@ -96,7 +96,9 @@ export class BookProcessingService {
     }
 
     logger.info("Triggering Mistral OCR on PDF...");
-    const ocrPages = await this.ocrService.processDocument(filePath);
+    const ocrResult = await this.ocrService.processDocumentWithRawPayload(filePath);
+    this.writeRawOcrPayload(bookId, ocrResult.rawPayload);
+    const ocrPages = ocrResult.pages;
 
     // 2. Save any extracted images to disk
     logger.info("Saving OCR-extracted page images...");
@@ -126,20 +128,22 @@ export class BookProcessingService {
       contentPages.map((p) => ({ pageNumber: p.pageNumber, anchorId: p.anchorId })),
     );
 
-    // 5. Normalize pages
-    logger.info("Normalizing OCR text and code blocks...");
-    const normalizedPages = contentPages.map((page) => {
-      let cleanMarkdown = NormalizationService.stripBoundaryBlocks(
+    // 5. Normalize OCR markdown before footnote and preview rendering
+    logger.info("Removing OCR boundaries and formatting supported code blocks...");
+    const normalizedPages = await Promise.all(contentPages.map(async (page) => {
+      const boundaryStrippedMarkdown = NormalizationService.stripBoundaryBlocks(
         page.markdown,
         page.headers,
         page.footers,
       );
-      cleanMarkdown = NormalizationService.normalizeCodeBlocks(cleanMarkdown);
+      const cleanMarkdown = await NormalizationService.normalizeCodeBlocks(
+        boundaryStrippedMarkdown,
+      );
       return {
         ...page,
         markdown: cleanMarkdown,
       };
-    });
+    }));
 
     // 6. Build endnotes
     logger.info("Linking footnotes and constructing endnotes...");
@@ -305,7 +309,9 @@ export class BookProcessingService {
 
     // 3. Process PDF via Mistral OCR
     logger.info("Triggering Mistral OCR on converted PDF...");
-    const ocrPages = await this.ocrService.processDocument(targetPdfPath);
+    const ocrResult = await this.ocrService.processDocumentWithRawPayload(targetPdfPath);
+    this.writeRawOcrPayload(bookId, ocrResult.rawPayload);
+    const ocrPages = ocrResult.pages;
 
     // 4. Save any extracted images to disk
     logger.info("Saving OCR-extracted page images...");
@@ -335,23 +341,23 @@ export class BookProcessingService {
       contentPages.map((p) => ({ pageNumber: p.pageNumber, anchorId: p.anchorId })),
     );
 
-    // 7. Normalize pages, blocks, tables, images, and warnings
-    logger.info("Normalizing OCR text and code blocks...");
-    const normalizedPages = contentPages.map((page) => {
-      // Strip headers/footers
-      let cleanMarkdown = NormalizationService.stripBoundaryBlocks(
+    // 7. Normalize OCR markdown before footnote and preview rendering
+    logger.info("Removing OCR boundaries and formatting supported code blocks...");
+    const normalizedPages = await Promise.all(contentPages.map(async (page) => {
+      const boundaryStrippedMarkdown = NormalizationService.stripBoundaryBlocks(
         page.markdown,
         page.headers,
         page.footers,
       );
-      // Re-indent Python-like code blocks
-      cleanMarkdown = NormalizationService.normalizeCodeBlocks(cleanMarkdown);
+      const cleanMarkdown = await NormalizationService.normalizeCodeBlocks(
+        boundaryStrippedMarkdown,
+      );
 
       return {
         ...page,
         markdown: cleanMarkdown,
       };
-    });
+    }));
 
     // 8. Build endnotes and rewrite body text
     logger.info("Linking footnotes and constructing endnotes...");
@@ -479,6 +485,15 @@ export class BookProcessingService {
       (page) =>
         page.pageNumber < tocStartPageNumber ||
         page.pageNumber > tocEndPageNumber,
+    );
+  }
+
+  private writeRawOcrPayload(bookId: string, rawPayload: any): void {
+    this.storageService.writeFile(
+      bookId,
+      "processing",
+      "raw_payload.json",
+      JSON.stringify(rawPayload, null, 2),
     );
   }
 

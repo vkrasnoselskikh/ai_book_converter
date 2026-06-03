@@ -215,7 +215,10 @@ The system must provide a single-page web application named "AI Book converter".
 8.6. WHEN the system prepares HTML for preview, it SHALL preserve the content order of the source book.
 8.7. IF input or intermediate data is incomplete, the system SHALL continue processing available parts and save warnings.
 8.8. WHEN the system sends a document to Mistral OCR, it SHALL use the same OCR behavior as the current JS live OCR flow.
+8.8.1. WHEN the system receives a Mistral OCR response, the system SHALL save the raw OCR payload before content normalization.
 8.9. WHEN the system normalizes OCR page content, it SHALL separate service header and footer blocks from the main text.
+8.9.1. WHEN OCR page content contains fenced code blocks with supported languages, the system SHALL format those code blocks before markdown rendering.
+8.9.2. IF code block formatting fails or the code block language is unsupported, the system SHALL preserve the original code block content.
 8.10. WHEN the table-of-contents agent runs, it SHALL use pages 1 through 20 of the book as input.
 8.11. WHEN the table-of-contents agent returns entries, each entry SHALL contain a title and a hyperlink target page anchor.
 8.12. WHEN the table-of-contents agent returns entries, entries SHALL NOT use raw page numbers as the user-facing navigation target.

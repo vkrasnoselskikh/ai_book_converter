@@ -89,6 +89,24 @@ describe("AI Book Converter Web-UI Domain Services", () => {
       expect(normalized[0].images[0].fileName).toBe("img_cover.jpg");
     });
 
+    it("should expose the raw OCR payload before normalization", async () => {
+      const tempPdf = "temp_raw_payload_book.pdf";
+      fs.writeFileSync(tempPdf, "%PDF-1.4 mock pdf");
+
+      try {
+        const ocrService = new MistralOcrService();
+        const result = await ocrService.processDocumentWithRawPayload(tempPdf);
+
+        expect(result.rawPayload.pages).toHaveLength(2);
+        expect(result.rawPayload.pages[0].markdown).toContain(
+          "# Premium Artificial Intelligence",
+        );
+        expect(result.pages[0].anchorId).toBe("page-1");
+      } finally {
+        fs.unlinkSync(tempPdf);
+      }
+    });
+
     it("should normalize live Mistral SDK OCR image fields", async () => {
       const ocrService = new MistralOcrService();
       const mockSdkResponse = {
@@ -224,10 +242,72 @@ describe("AI Book Converter Web-UI Domain Services", () => {
       expect(stripped).toBe("Main content body");
     });
 
-    it("should reindent Python-like code blocks cleanly", () => {
-      const codeBlock = "```python\ndef hello():\nprint(\"Hi\")\n```";
-      const normalized = NormalizationService.normalizeCodeBlocks(codeBlock);
-      expect(normalized).toContain("    print");
+    it("should format Python fenced code blocks through Ruff", async () => {
+      NormalizationService.setFormatterCommandRunnerForTests(
+        async (command, args, input) => {
+          expect(command).toBe("ruff");
+          expect(args).toEqual(["format", "--stdin-filename", "code.py", "-"]);
+          expect(input).toBe('def hello( name ):\n    print( name )');
+          return 'def hello(name):\n    print(name)\n';
+        },
+      );
+
+      try {
+        const markdown = "```python\ndef hello( name ):\n    print( name )\n```";
+        const normalized = await NormalizationService.normalizeCodeBlocks(markdown);
+
+        expect(normalized).toBe("```python\ndef hello(name):\n    print(name)\n```");
+      } finally {
+        NormalizationService.setFormatterCommandRunnerForTests(null);
+      }
+    });
+
+    it("should format Prettier-supported fenced code blocks", async () => {
+      const markdown = [
+        "```js",
+        "const value={answer:42}",
+        "```",
+        "",
+        "```markdown",
+        "|a|b|",
+        "|-|-|",
+        "|1|2|",
+        "",
+        "```",
+      ].join("\n");
+
+      const normalized = await NormalizationService.normalizeCodeBlocks(markdown);
+
+      expect(normalized).toContain("```js\nconst value = { answer: 42 };\n```");
+      expect(normalized).toContain(
+        "```markdown\n| a   | b   |\n| --- | --- |\n| 1   | 2   |\n```",
+      );
+    });
+
+    it("should keep original code when a formatter fails", async () => {
+      NormalizationService.setFormatterCommandRunnerForTests(async () => {
+        throw new Error("formatter unavailable");
+      });
+
+      try {
+        const markdown = "```python\ndef hello():\nprint(\"Hi\")\n```";
+        const normalized = await NormalizationService.normalizeCodeBlocks(markdown);
+
+        expect(normalized).toBe(markdown);
+      } finally {
+        NormalizationService.setFormatterCommandRunnerForTests(null);
+      }
+    });
+
+    it("should strip boundaries before formatting fenced code blocks", async () => {
+      const markdown = "Header Text\n\n```python\ndef hello():\nprint(\"Hi\")\n```\n\nFooter Text";
+      const stripped = NormalizationService.stripBoundaryBlocks(
+        markdown,
+        ["Header Text"],
+        ["Footer Text"]
+      );
+
+      expect(stripped).toBe("```python\ndef hello():\nprint(\"Hi\")\n```");
     });
   });
 
@@ -570,6 +650,7 @@ describe("AI Book Converter Web-UI Domain Services", () => {
 
       const zip = new AdmZip(epubBuffer);
       const pageXhtml = zip.readAsText("OEBPS/xhtml/page-0.xhtml");
+      const stylesheet = zip.readAsText("OEBPS/css/stylesheet.css");
 
       expect(pageXhtml).toContain("<h1>Chapter</h1>");
       expect(pageXhtml).toContain("<ul>");
@@ -581,6 +662,12 @@ describe("AI Book Converter Web-UI Domain Services", () => {
       expect(pageXhtml).toContain('class="language-ts"');
       expect(pageXhtml).toContain('src="../images/sample.png"');
       expect(pageXhtml).not.toContain('rel="preload"');
+      expect(stylesheet).toContain("pre {");
+      expect(stylesheet).toContain("border: 1px solid #cccccc;");
+      expect(stylesheet).toContain("margin: 3rem 0;");
+      expect(stylesheet).toContain("overflow: auto;");
+      expect(stylesheet).toContain("white-space: pre;");
+      expect(stylesheet).toContain("font-size: 0.85em;");
     });
   });
 
