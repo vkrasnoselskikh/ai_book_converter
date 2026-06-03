@@ -327,11 +327,13 @@ Table-of-contents agent flow:
 1. "TableOfContentsAgentService" uses "@openai/agents" for agent orchestration.
 2. The agent client is configured using the OpenAI client wrapper inside the `@openai/agents` SDK, pointing the `baseURL` to Mistral's API endpoint (`https://api.mistral.ai/v1`) and passing the `MISTRAL_API_KEY` to run Mistral models natively.
 3. The agent receives recognized pages 3 through 10 as input, using original one-based page numbers.
-4. The agent returns structured entries with section title, nesting level, and "anchorId".
-5. The agent must not return raw page numbers as user-facing navigation targets.
-6. "BookPreviewService" renders the table of contents as hyperlinks to page anchors.
-7. "BookProcessingService" validates table-of-contents anchors against the recognized one-based page anchors and falls back to the nearest available page anchor when needed.
-8. EPUB download navigation maps "page-1" to the first generated OCR XHTML page, preserving the one-based preview anchor contract.
+4. The agent treats pages 3 through 10 only as source pages for reading the printed table of contents and distinguishes those source page labels from target page numbers printed in the table-of-contents text.
+5. The agent returns structured entries with section title, nesting level, target "pageNumber", and "anchorId" derived from that target page number.
+6. "AgentService" normalizes agent output so target "pageNumber" takes precedence over any conflicting "anchorId"; for example, a TOC line found on source page 4 that points to printed page 24 becomes "page-24".
+7. The agent must not return raw page numbers as user-facing navigation targets.
+8. "BookPreviewService" renders the table of contents as hyperlinks to page anchors.
+9. "BookProcessingService" validates table-of-contents anchors against the recognized one-based page anchors and falls back to the nearest available page anchor when needed.
+10. EPUB download navigation maps "page-1" to the first generated OCR XHTML page, preserving the one-based preview anchor contract.
 
 The integration utilizes the OpenAI-compatible model invocation protocol, avoiding custom adapter wrappers while cleanly encapsulating prompt construction and output validation in their respective services.
 
@@ -414,6 +416,7 @@ Each error must have:
 - `apps/web-ui/tests/unit/test_content_normalization_service.ts` - verifies portable normalization rules.
 - `apps/web-ui/tests/unit/test_endnote_service.ts` - verifies footnotes and unmatched footnotes.
 - `apps/web-ui/tests/unit/test_preview_render_service.ts` - verifies structured markdown preview preparation and legacy HTML preview.
+- `apps/web-ui/tests/unit/services.test.ts` - verifies TOC anchor normalization by target page numbers read from the table-of-contents text.
 - `apps/web-ui/tests/unit/test_ssr.tsx` - verifies first-screen server-side rendering.
 - `apps/web-ui/tests/unit/test_book_url_builder.ts` - verifies canonical book processing URLs.
 - `apps/web-ui/tests/unit/test_header_state.tsx` - verifies header state for empty and selected books.

@@ -140,6 +140,22 @@ describe("AI Book Converter Web-UI Domain Services", () => {
       expect(toc[0].title).toBe("Introduction");
       expect(toc[0].anchorId).toBe("page-1");
     });
+
+    it("should anchor TOC entries to target page numbers read from the TOC text", () => {
+      const agentService = new AgentService();
+      const toc = agentService.normalizeTocAgentEntries([
+        {
+          title: "Chapter 2: Planning",
+          level: 1,
+          pageNumber: 24,
+          anchorId: "page-4"
+        }
+      ]);
+
+      expect(toc).toHaveLength(1);
+      expect(toc[0].title).toBe("Chapter 2: Planning");
+      expect(toc[0].anchorId).toBe("page-24");
+    });
   });
 
   // 5. Normalization Service Tests

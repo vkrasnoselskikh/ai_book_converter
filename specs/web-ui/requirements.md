@@ -218,6 +218,8 @@ The system must provide a single-page web application named "AI Book converter".
 8.12. WHEN the table-of-contents agent returns entries, entries SHALL NOT use raw page numbers as the user-facing navigation target.
 8.13. WHEN OCR images are saved, the system SHALL persist and render them with stable filenames that match the preview and EPUB image references.
 8.14. WHEN preview content is rendered from OCR pages, the system SHALL use one-based page anchors that match table-of-contents links.
+8.15. WHEN the table-of-contents agent reads an entry from a table-of-contents page, the system SHALL create the page anchor from the target page number printed in the table-of-contents text.
+8.15.1. WHEN a table-of-contents entry is found on one book page and points to a different printed target page number, the system SHALL link the entry to the printed target page anchor.
 
 #### Functional Tests
 

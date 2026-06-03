@@ -217,7 +217,7 @@ Rules:
 
 - The coverage table is mandatory and must cover all requirements
 - Module/class names must be specified in English and in quotes
-- Language: Russian
+- Language: English
 
 ---
 

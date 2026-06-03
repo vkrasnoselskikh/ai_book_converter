@@ -96,20 +96,24 @@ Do NOT include any extra conversational text or markdown code blocks (like \`\`\
 
       const instructions = `You are a specialist in book structure and formatting.
 Analyze the text of pages 3 to 10 of a book to build the Table of Contents (TOC).
-For each section you identify, output the title, the heading level (1 for main chapters, 2 for sub-chapters, etc.), and the anchor ID of the page it starts on.
-The anchor ID MUST match the page number exactly in the format: page-<pageNumber>. E.g., if a chapter starts on Page Number: 4, the anchor ID is "page-4".
-You must NOT return raw page numbers as user-facing text, only as part of the anchorId.
+These input pages are only the pages where the printed table of contents may appear.
+For each TOC line you identify, read the printed target page number from the TOC text itself. Do not use the input page label unless the TOC line explicitly points to that same page.
+For each section, output the title, heading level (1 for main chapters, 2 for sub-chapters, etc.), the target pageNumber read from the TOC text, and the anchor ID for that target page.
+The anchor ID MUST match the target page number in the format: page-<pageNumber>. E.g., if a TOC line says a chapter starts on printed page 24, return "pageNumber": 24 and "anchorId": "page-24", even when that TOC line was found on Page Number: 4.
+You must NOT return raw page numbers as user-facing text, only in the pageNumber field and as part of the anchorId.
 Your output must be a single, valid JSON array matching this schema:
 [
   {
     "title": "Introduction",
     "level": 1,
-    "anchorId": "page-3"
+    "pageNumber": 12,
+    "anchorId": "page-12"
   },
   {
     "title": "1.1 Main Concept",
     "level": 2,
-    "anchorId": "page-4"
+    "pageNumber": 24,
+    "anchorId": "page-24"
   }
 ]
 Do NOT include any extra conversational text or markdown code blocks (like \`\`\`json). Output raw valid JSON only.`;
@@ -127,11 +131,7 @@ Do NOT include any extra conversational text or markdown code blocks (like \`\`\
       const parsed = JSON.parse(cleanedOutput);
 
       if (Array.isArray(parsed)) {
-        return parsed.map((entry: any) => ({
-          title: entry.title || "Section",
-          level: typeof entry.level === "number" ? entry.level : 1,
-          anchorId: entry.anchorId || `page-${entry.pageNumber || 3}`
-        }));
+        return this.normalizeTocAgentEntries(parsed);
       }
 
       return this.getMockTocResult();
@@ -153,6 +153,44 @@ Do NOT include any extra conversational text or markdown code blocks (like \`\`\
       cleaned = cleaned.substring(0, cleaned.length - 3);
     }
     return cleaned.trim();
+  }
+
+  normalizeTocAgentEntries(entries: unknown): TocAgentEntry[] {
+    if (!Array.isArray(entries)) {
+      return [];
+    }
+
+    return entries.map((entry: any) => {
+      const targetPageNumber = this.extractPositiveInteger(
+        entry.pageNumber ?? entry.targetPageNumber,
+      );
+
+      return {
+        title: entry.title || "Section",
+        level: typeof entry.level === "number" ? entry.level : 1,
+        anchorId: targetPageNumber
+          ? `page-${targetPageNumber}`
+          : this.normalizeTocAnchorId(entry.anchorId),
+      };
+    });
+  }
+
+  private normalizeTocAnchorId(anchorId: unknown): string {
+    if (typeof anchorId === "string" && /^page-\d+$/.test(anchorId)) {
+      return anchorId;
+    }
+    return "page-3";
+  }
+
+  private extractPositiveInteger(value: unknown): number | null {
+    if (typeof value === "number" && Number.isInteger(value) && value > 0) {
+      return value;
+    }
+    if (typeof value === "string" && /^\d+$/.test(value.trim())) {
+      const parsed = parseInt(value, 10);
+      return parsed > 0 ? parsed : null;
+    }
+    return null;
   }
 
   private createMistralRunner(): Runner | null {
