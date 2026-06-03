@@ -22,10 +22,11 @@ for (const envPath of envPaths) {
 
 export const config = {
   port: parseInt(process.env.PORT || "8000", 10),
-  jwtSecret: process.env.JWT_SECRET || "ai-book-converter-premium-secret-key-12345",
+  jwtSecret:
+    process.env.JWT_SECRET || "ai-book-converter-premium-secret-key-12345",
   mistralApiKey: process.env.MISTRAL_API_KEY || "",
   mistralOcrModel: process.env.MISTRAL_OCR_MODEL || "mistral-ocr-latest",
-  mistralLlmModel: process.env.MISTRAL_LLM_MODEL || "pixtral-12b-latest",
+  mistralLlmModel: process.env.MISTRAL_LLM_MODEL || "mistral-small-latest",
 
   // Books Storage directory
   booksPath: (() => {
