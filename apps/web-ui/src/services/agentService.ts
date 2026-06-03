@@ -26,6 +26,12 @@ export interface TocAgentEntry {
   anchorId: string;
 }
 
+export interface TocAgentResult {
+  entries: TocAgentEntry[];
+  tocStartPageNumber: number | null;
+  tocEndPageNumber: number | null;
+}
+
 export class AgentService {
   private isLive = !!config.mistralApiKey;
   private model = config.mistralLlmModel || "pixtral-12b-latest";
@@ -83,7 +89,7 @@ Do NOT include any extra conversational text or markdown code blocks (like \`\`\
   }
 
   // Generates Table of Contents using TocAgent
-  async extractTableOfContents(pages: Array<{ pageNumber: number; text: string }>): Promise<TocAgentEntry[]> {
+  async extractTableOfContents(pages: Array<{ pageNumber: number; text: string }>): Promise<TocAgentResult> {
     if (process.env.NODE_ENV === "test" || !this.isLive) {
       logger.info("Extracting TOC in mock mode");
       return this.getMockTocResult();
@@ -95,27 +101,33 @@ Do NOT include any extra conversational text or markdown code blocks (like \`\`\
       const pagesInput = pages.map(p => `[Page Number: ${p.pageNumber}]\n${p.text}\n===`).join("\n");
 
       const instructions = `You are a specialist in book structure and formatting.
-Analyze the text of pages 3 to 10 of a book to build the Table of Contents (TOC).
+Analyze the text of pages 1 to 20 of a book to build the Table of Contents (TOC).
 These input pages are only the pages where the printed table of contents may appear.
+Identify the first and last source Page Number where the printed table of contents appears.
 For each TOC line you identify, read the printed target page number from the TOC text itself. Do not use the input page label unless the TOC line explicitly points to that same page.
 For each section, output the title, heading level (1 for main chapters, 2 for sub-chapters, etc.), the target pageNumber read from the TOC text, and the anchor ID for that target page.
 The anchor ID MUST match the target page number in the format: page-<pageNumber>. E.g., if a TOC line says a chapter starts on printed page 24, return "pageNumber": 24 and "anchorId": "page-24", even when that TOC line was found on Page Number: 4.
 You must NOT return raw page numbers as user-facing text, only in the pageNumber field and as part of the anchorId.
-Your output must be a single, valid JSON array matching this schema:
-[
-  {
-    "title": "Introduction",
-    "level": 1,
-    "pageNumber": 12,
-    "anchorId": "page-12"
-  },
-  {
-    "title": "1.1 Main Concept",
-    "level": 2,
-    "pageNumber": 24,
-    "anchorId": "page-24"
-  }
-]
+Your output must be a single, valid JSON object matching this schema:
+{
+  "tocStartPageNumber": 3,
+  "tocEndPageNumber": 5,
+  "entries": [
+    {
+      "title": "Introduction",
+      "level": 1,
+      "pageNumber": 12,
+      "anchorId": "page-12"
+    },
+    {
+      "title": "1.1 Main Concept",
+      "level": 2,
+      "pageNumber": 24,
+      "anchorId": "page-24"
+    }
+  ]
+}
+If no printed table of contents is present, return null for tocStartPageNumber and tocEndPageNumber and an empty entries array.
 Do NOT include any extra conversational text or markdown code blocks (like \`\`\`json). Output raw valid JSON only.`;
 
       const tocAgent = new Agent({
@@ -124,17 +136,13 @@ Do NOT include any extra conversational text or markdown code blocks (like \`\`\
         model: this.model
       });
 
-      const prompt = `Here are pages 3 through 10 with their corresponding one-based Page Numbers:\n\n${pagesInput}\n\nGenerate and return the TOC JSON array.`;
+      const prompt = `Here are pages 1 through 20 with their corresponding one-based Page Numbers:\n\n${pagesInput}\n\nGenerate and return the TOC JSON object.`;
       const runResult = await this.getRunner().run(tocAgent, prompt);
 
       const cleanedOutput = this.cleanJsonString(runResult.finalOutput || "");
       const parsed = JSON.parse(cleanedOutput);
 
-      if (Array.isArray(parsed)) {
-        return this.normalizeTocAgentEntries(parsed);
-      }
-
-      return this.getMockTocResult();
+      return this.normalizeTocAgentResult(parsed);
     } catch (err: any) {
       logger.error("TOC Agent failed: ", err);
       return this.getMockTocResult();
@@ -153,6 +161,37 @@ Do NOT include any extra conversational text or markdown code blocks (like \`\`\
       cleaned = cleaned.substring(0, cleaned.length - 3);
     }
     return cleaned.trim();
+  }
+
+  normalizeTocAgentResult(result: unknown): TocAgentResult {
+    if (Array.isArray(result)) {
+      return {
+        entries: this.normalizeTocAgentEntries(result),
+        tocStartPageNumber: null,
+        tocEndPageNumber: null,
+      };
+    }
+
+    if (!result || typeof result !== "object") {
+      return {
+        entries: [],
+        tocStartPageNumber: null,
+        tocEndPageNumber: null,
+      };
+    }
+
+    const rawResult = result as any;
+    const entries = this.normalizeTocAgentEntries(rawResult.entries);
+    const range = this.normalizeTocRange(
+      rawResult.tocStartPageNumber ?? rawResult.toc_start_page_number,
+      rawResult.tocEndPageNumber ?? rawResult.toc_end_page_number,
+    );
+
+    return {
+      entries,
+      tocStartPageNumber: range.tocStartPageNumber,
+      tocEndPageNumber: range.tocEndPageNumber,
+    };
   }
 
   normalizeTocAgentEntries(entries: unknown): TocAgentEntry[] {
@@ -191,6 +230,30 @@ Do NOT include any extra conversational text or markdown code blocks (like \`\`\
       return parsed > 0 ? parsed : null;
     }
     return null;
+  }
+
+  private normalizeTocRange(
+    startValue: unknown,
+    endValue: unknown,
+  ): Pick<TocAgentResult, "tocStartPageNumber" | "tocEndPageNumber"> {
+    const tocStartPageNumber = this.extractPositiveInteger(startValue);
+    const tocEndPageNumber = this.extractPositiveInteger(endValue);
+
+    if (
+      !tocStartPageNumber ||
+      !tocEndPageNumber ||
+      tocStartPageNumber > tocEndPageNumber
+    ) {
+      return {
+        tocStartPageNumber: null,
+        tocEndPageNumber: null,
+      };
+    }
+
+    return {
+      tocStartPageNumber,
+      tocEndPageNumber,
+    };
   }
 
   private createMistralRunner(): Runner | null {
@@ -239,18 +302,22 @@ Do NOT include any extra conversational text or markdown code blocks (like \`\`\
     };
   }
 
-  private getMockTocResult(): TocAgentEntry[] {
-    return [
-      {
-        title: "Introduction",
-        level: 1,
-        anchorId: "page-1"
-      },
-      {
-        title: "Chapter 1: Agent Architectures",
-        level: 1,
-        anchorId: "page-2"
-      }
-    ];
+  private getMockTocResult(): TocAgentResult {
+    return {
+      tocStartPageNumber: 2,
+      tocEndPageNumber: 3,
+      entries: [
+        {
+          title: "Introduction",
+          level: 1,
+          anchorId: "page-1"
+        },
+        {
+          title: "Chapter 1: Agent Architectures",
+          level: 1,
+          anchorId: "page-2"
+        }
+      ]
+    };
   }
 }

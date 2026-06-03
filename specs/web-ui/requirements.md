@@ -122,6 +122,7 @@ The system must provide a single-page web application named "AI Book converter".
 4.10. WHEN the user opens a valid book processing URL, the system SHALL show the current processing state for that book.
 4.11. WHEN the user opens a valid book processing URL after processing has completed, the system SHALL show the editable metadata, cover, and preview for that book.
 4.12. WHILE a book is being processed, the user SHALL be able to leave the browser tab and later return to the same book processing URL.
+4.13. WHEN the system renders article preview content, it SHALL apply readable article styling to headings, links, lists, code blocks, tables, quotes, and images.
 
 #### Functional Tests
 
@@ -213,20 +214,23 @@ The system must provide a single-page web application named "AI Book converter".
 8.7. IF input or intermediate data is incomplete, the system SHALL continue processing available parts and save warnings.
 8.8. WHEN the system sends a document to Mistral OCR, it SHALL use the same OCR behavior as the current JS live OCR flow.
 8.9. WHEN the system normalizes OCR page content, it SHALL separate service header and footer blocks from the main text.
-8.10. WHEN the table-of-contents agent runs, it SHALL use pages 3 through 10 of the book as input.
+8.10. WHEN the table-of-contents agent runs, it SHALL use pages 1 through 20 of the book as input.
 8.11. WHEN the table-of-contents agent returns entries, each entry SHALL contain a title and a hyperlink target page anchor.
 8.12. WHEN the table-of-contents agent returns entries, entries SHALL NOT use raw page numbers as the user-facing navigation target.
 8.13. WHEN OCR images are saved, the system SHALL persist and render them with stable filenames that match the preview and EPUB image references.
 8.14. WHEN preview content is rendered from OCR pages, the system SHALL use one-based page anchors that match table-of-contents links.
 8.15. WHEN the table-of-contents agent reads an entry from a table-of-contents page, the system SHALL create the page anchor from the target page number printed in the table-of-contents text.
 8.15.1. WHEN a table-of-contents entry is found on one book page and points to a different printed target page number, the system SHALL link the entry to the printed target page anchor.
+8.16. WHEN the table-of-contents agent runs, it SHALL identify the source page range where the printed table of contents starts and ends when such a range is present.
+8.17. WHEN OCR-derived final preview and book artifacts are prepared, the system SHALL exclude pages classified as table-of-contents pages.
+8.17.1. IF the table-of-contents agent does not return a valid table-of-contents page range, the system SHALL keep OCR pages in the final preview and book artifacts.
 
 #### Functional Tests
 
 - `apps/web-ui/tests/functional/test_converter_port.ts` - "preserves the current converter normalization rules in the web flow".
 - `apps/web-ui/tests/functional/test_partial_book_data.ts` - "processes partial data without losing diagnostic warnings".
 - `apps/web-ui/tests/functional/test_ocr_page_anchors.ts` - "adds page anchors to OCR pages".
-- `apps/web-ui/tests/functional/test_toc_agent.ts` - "creates table of contents links from pages 3 through 10".
+- `apps/web-ui/tests/functional/test_toc_agent.ts` - "creates table of contents links from pages 1 through 20 and removes detected table-of-contents pages".
 
 ### 9. Authentication and Session-to-Account Linking
 

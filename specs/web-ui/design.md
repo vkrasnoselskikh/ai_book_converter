@@ -19,7 +19,7 @@ Main components:
 - "BookUploadPanel" - EPUB and DJVU upload, submit state, and format errors.
 - "BookMetadataPanel" - metadata display and editing.
 - "BookCoverEditor" - current cover preview and replacement upload.
-- "BookReader" - processed book content preview rendered through "ReactMarkdown" for Mistral OCR markdown pages, with a legacy HTML fallback for EPUB preview content.
+- "BookReader" - processed book content preview rendered through "ReactMarkdown" for Mistral OCR markdown pages, with a legacy HTML fallback for EPUB preview content. It applies article-level daisyUI/Tailwind styling for headings, links, lists, code blocks, tables, quotes, images, and endnotes.
 - "ProcessingStatus" - processing state and diagnostic messages.
 
 Styling uses daisyUI version > "5.5.19" through CSS. The day theme must use "emerald", and the night theme must use "forest". Theme switching must be implemented through the theme attribute on the root HTML element or an equivalent daisyUI mechanism.
@@ -69,7 +69,7 @@ Recommended server modules:
 - "services/bookProcessingService.ts" - book processing orchestration.
 - "services/mistralOcrService.ts" - Mistral OCR request and page anchor enrichment.
 - "services/metadataAgentService.ts" - metadata extraction agent based on the first three pages.
-- "services/tableOfContentsAgentService.ts" - table of contents agent based on pages 3 through 10.
+- "services/tableOfContentsAgentService.ts" - table of contents agent based on the first 20 pages.
 - "services/bookPreviewService.ts" - preview data preparation.
 
 ## Routing
@@ -326,14 +326,26 @@ Table-of-contents agent flow:
 
 1. "TableOfContentsAgentService" uses "@openai/agents" for agent orchestration.
 2. The agent client is configured using the OpenAI client wrapper inside the `@openai/agents` SDK, pointing the `baseURL` to Mistral's API endpoint (`https://api.mistral.ai/v1`) and passing the `MISTRAL_API_KEY` to run Mistral models natively.
-3. The agent receives recognized pages 3 through 10 as input, using original one-based page numbers.
-4. The agent treats pages 3 through 10 only as source pages for reading the printed table of contents and distinguishes those source page labels from target page numbers printed in the table-of-contents text.
-5. The agent returns structured entries with section title, nesting level, target "pageNumber", and "anchorId" derived from that target page number.
+3. The agent receives the first 20 recognized pages as input, using original one-based page numbers.
+4. The agent treats the first 20 pages only as source pages for reading the printed table of contents and distinguishes those source page labels from target page numbers printed in the table-of-contents text.
+5. The agent returns structured entries with section title, nesting level, target "pageNumber", and "anchorId" derived from that target page number, plus the source page range where the printed table of contents starts and ends.
 6. "AgentService" normalizes agent output so target "pageNumber" takes precedence over any conflicting "anchorId"; for example, a TOC line found on source page 4 that points to printed page 24 becomes "page-24".
 7. The agent must not return raw page numbers as user-facing navigation targets.
-8. "BookPreviewService" renders the table of contents as hyperlinks to page anchors.
-9. "BookProcessingService" validates table-of-contents anchors against the recognized one-based page anchors and falls back to the nearest available page anchor when needed.
-10. EPUB download navigation maps "page-1" to the first generated OCR XHTML page, preserving the one-based preview anchor contract.
+8. "BookProcessingService" removes only pages in the detected table-of-contents source page range before endnote construction and preview rendering. If the range is invalid or absent, the original OCR pages are kept.
+9. Page anchors remain the original one-based OCR anchors and are not renumbered after table-of-contents pages are removed.
+10. "BookPreviewService" renders the table of contents as hyperlinks to page anchors.
+11. "BookProcessingService" validates table-of-contents anchors against the remaining recognized one-based page anchors and falls back to the nearest available page anchor when needed.
+12. EPUB download navigation maps "page-1" to the first generated OCR XHTML page, preserving the one-based preview anchor contract.
+
+The table-of-contents extraction result has this shape:
+
+```ts
+{
+  entries: TocAgentEntry[];
+  tocStartPageNumber: number | null;
+  tocEndPageNumber: number | null;
+}
+```
 
 The integration utilizes the OpenAI-compatible model invocation protocol, avoiding custom adapter wrappers while cleanly encapsulating prompt construction and output validation in their respective services.
 
@@ -410,7 +422,7 @@ Each error must have:
 - `apps/web-ui/tests/unit/test_account_linking_service.ts` - verifies session books are linked to new and existing accounts.
 - `apps/web-ui/tests/unit/test_mistral_ocr_service.ts` - verifies OCR payload normalization and page anchor creation.
 - `apps/web-ui/tests/unit/test_metadata_agent_service.ts` - verifies first-three-pages metadata extraction and result validation.
-- `apps/web-ui/tests/unit/test_table_of_contents_agent_service.ts` - verifies pages 3 through 10 produce anchor-based entries.
+- `apps/web-ui/tests/unit/test_table_of_contents_agent_service.ts` - verifies the first 20 pages produce anchor-based entries and a table-of-contents page range.
 - `apps/web-ui/tests/unit/test_metadata_service.ts` - verifies metadata reading and updating.
 - `apps/web-ui/tests/unit/test_cover_service.ts` - verifies cover replacement.
 - `apps/web-ui/tests/unit/test_content_normalization_service.ts` - verifies portable normalization rules.
@@ -436,7 +448,7 @@ Each error must have:
 - `apps/web-ui/tests/functional/test_book_reader.ts` - verifies book preview.
 - `apps/web-ui/tests/functional/test_ocr_page_anchors.ts` - verifies OCR pages receive preview anchors.
 - `apps/web-ui/tests/functional/test_table_of_contents.ts` - verifies table of contents links to page anchors.
-- `apps/web-ui/tests/functional/test_toc_agent.ts` - verifies table of contents extraction from pages 3 through 10.
+- `apps/web-ui/tests/functional/test_toc_agent.ts` - verifies table of contents extraction from the first 20 pages and removal of detected table-of-contents pages.
 - `apps/web-ui/tests/functional/test_anonymous_books.ts` - verifies current anonymous session book access.
 - `apps/web-ui/tests/functional/test_user_books.ts` - verifies authenticated user book access.
 - `apps/web-ui/tests/functional/test_shared_books.ts` - verifies linking one book to several users.

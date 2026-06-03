@@ -64,6 +64,37 @@ export const BookReader: React.FC<BookReaderProps> = ({
   };
 
   const markdownComponents: Components = {
+    h1({ children }) {
+      return (
+        <h1 className="mb-5 mt-10 scroll-mt-24 border-b border-base-content/10 pb-4 font-heading text-3xl font-extrabold leading-tight text-base-content sm:text-4xl">
+          {children}
+        </h1>
+      );
+    },
+    h2({ children }) {
+      return (
+        <h2 className="mb-4 mt-9 scroll-mt-24 font-heading text-2xl font-bold leading-tight text-base-content sm:text-3xl">
+          {children}
+        </h2>
+      );
+    },
+    h3({ children }) {
+      return (
+        <h3 className="mb-3 mt-7 scroll-mt-24 font-heading text-xl font-bold leading-snug text-base-content sm:text-2xl">
+          {children}
+        </h3>
+      );
+    },
+    h4({ children }) {
+      return (
+        <h4 className="mb-3 mt-6 scroll-mt-24 font-heading text-lg font-semibold leading-snug text-base-content">
+          {children}
+        </h4>
+      );
+    },
+    p({ children }) {
+      return <p className="mb-5 leading-8 text-base-content/90">{children}</p>;
+    },
     a({ href, children }) {
       const isAnchor = href?.startsWith("#") || false;
       return (
@@ -72,33 +103,113 @@ export const BookReader: React.FC<BookReaderProps> = ({
           onClick={(event) => handleAnchorClick(event, href)}
           target={isAnchor ? undefined : "_blank"}
           rel={isAnchor ? undefined : "noopener noreferrer"}
+          className="link link-primary font-medium decoration-primary/40 decoration-2 underline-offset-4 hover:decoration-primary"
         >
           {children}
         </a>
       );
     },
+    strong({ children }) {
+      return <strong className="font-bold text-base-content">{children}</strong>;
+    },
+    em({ children }) {
+      return <em className="text-base-content/80">{children}</em>;
+    },
+    blockquote({ children }) {
+      return (
+        <blockquote className="my-7 rounded-md border-l-4 border-primary bg-primary/5 px-5 py-4 text-base-content/85">
+          {children}
+        </blockquote>
+      );
+    },
+    ul({ children }) {
+      return <ul className="mb-6 ml-6 list-disc space-y-2 leading-8">{children}</ul>;
+    },
+    ol({ children }) {
+      return <ol className="mb-6 ml-6 list-decimal space-y-2 leading-8">{children}</ol>;
+    },
+    li({ children }) {
+      return <li className="pl-2 text-base-content/90">{children}</li>;
+    },
+    hr() {
+      return <hr className="my-10 border-base-content/10" />;
+    },
     img({ src, alt }) {
       return (
-        <img
-          src={src || ""}
-          alt={alt || ""}
-          loading="lazy"
-          className="max-w-full rounded-md border border-base-content/10"
-        />
+        <figure className="my-8">
+          <img
+            src={src || ""}
+            alt={alt || ""}
+            loading="lazy"
+            className="mx-auto max-h-[720px] max-w-full rounded-md border border-base-content/10 bg-base-200 object-contain shadow-sm"
+          />
+          {alt && (
+            <figcaption className="mt-3 text-center text-sm text-base-content/60">
+              {alt}
+            </figcaption>
+          )}
+        </figure>
+      );
+    },
+    pre({ children }) {
+      return (
+        <div className="mockup-code my-7 overflow-x-auto rounded-md bg-neutral text-neutral-content shadow-sm">
+          <pre className="px-5 py-4 text-sm leading-7">{children}</pre>
+        </div>
+      );
+    },
+    code({ className, children }) {
+      const isLanguageBlock = /language-\w+/.test(className || "");
+      const isBlock = isLanguageBlock || String(children).includes("\n");
+      if (isBlock) {
+        return (
+          <code className={`${className || ""} font-mono text-sm`}>
+            {children}
+          </code>
+        );
+      }
+
+      return (
+        <code className="rounded bg-base-200 px-1.5 py-0.5 font-mono text-sm text-secondary">
+          {children}
+        </code>
       );
     },
     table({ children }) {
       return (
-        <div className="my-6 overflow-x-auto">
-          <table className="table table-zebra w-full text-sm">{children}</table>
+        <div className="my-8 overflow-x-auto rounded-md border border-base-content/10 bg-base-100 shadow-sm">
+          <table className="table table-zebra table-pin-rows w-full text-sm">
+            {children}
+          </table>
         </div>
       );
     },
+    thead({ children }) {
+      return <thead className="bg-base-200 text-base-content">{children}</thead>;
+    },
+    tbody({ children }) {
+      return <tbody>{children}</tbody>;
+    },
+    tr({ children }) {
+      return (
+        <tr className="border-b border-base-content/10 last:border-b-0">
+          {children}
+        </tr>
+      );
+    },
     th({ children }) {
-      return <th className="bg-base-200 font-bold">{children}</th>;
+      return (
+        <th className="whitespace-nowrap bg-base-200 px-4 py-3 text-left font-bold text-base-content">
+          {children}
+        </th>
+      );
     },
     td({ children }) {
-      return <td>{children}</td>;
+      return (
+        <td className="px-4 py-3 align-top text-base-content/85">
+          {children}
+        </td>
+      );
     },
   };
 
@@ -170,11 +281,15 @@ export const BookReader: React.FC<BookReaderProps> = ({
             </p>
           </div>
 
-          <article className="prose prose-base sm:prose-lg max-w-none text-left leading-relaxed text-base-content/90">
+          <article className="book-article max-w-none text-left text-base leading-relaxed text-base-content/90 sm:text-lg">
             {markdownPages.length > 0 ? (
               <>
                 {markdownPages.map((page) => (
-                  <section id={page.anchorId} key={page.anchorId || page.pageIndex}>
+                  <section
+                    id={page.anchorId}
+                    key={page.anchorId || page.pageIndex}
+                    className="scroll-mt-24 border-b border-base-content/5 py-8 first:pt-0 last:border-b-0"
+                  >
                     <ReactMarkdown
                       remarkPlugins={[remarkGfm]}
                       rehypePlugins={[rehypeRaw]}
@@ -186,10 +301,16 @@ export const BookReader: React.FC<BookReaderProps> = ({
                 ))}
                 {endnotes.length > 0 && (
                   <section id="endnotes">
-                    <h2>Endnotes</h2>
-                    <ol>
+                    <h2 className="mb-4 mt-10 border-t border-base-content/10 pt-8 font-heading text-2xl font-bold text-base-content">
+                      Endnotes
+                    </h2>
+                    <ol className="ml-6 list-decimal space-y-2">
                       {endnotes.map((endnote) => (
-                        <li id={endnote.noteId} key={endnote.noteId}>
+                        <li
+                          id={endnote.noteId}
+                          key={endnote.noteId}
+                          className="pl-2 leading-7 text-base-content/85"
+                        >
                           {endnote.marker !== null ? `[${endnote.marker}] ` : ""}
                           {endnote.text}
                           {endnote.linked && (
@@ -212,7 +333,10 @@ export const BookReader: React.FC<BookReaderProps> = ({
                 )}
               </>
             ) : (
-              <div dangerouslySetInnerHTML={{ __html: htmlContent }} />
+              <div
+                className="legacy-article-content"
+                dangerouslySetInnerHTML={{ __html: htmlContent }}
+              />
             )}
           </article>
         </div>

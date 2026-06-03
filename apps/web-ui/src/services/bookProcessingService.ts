@@ -5,7 +5,7 @@ import { BookStorageService } from "./bookStorageService.js";
 import { EpubExtractor } from "./epubExtractor.js";
 import { DjvuConverter } from "./djvuConverter.js";
 import { MistralOcrService } from "./mistralOcrService.js";
-import { AgentService } from "./agentService.js";
+import { AgentService, type TocAgentResult } from "./agentService.js";
 import { NormalizationService } from "./normalizationService.js";
 import { EndnoteService } from "./endnoteService.js";
 import { PreviewRenderService } from "./previewRenderService.js";
@@ -115,19 +115,20 @@ export class BookProcessingService {
 
     // 4. Extract Table of Contents via AgentService
     logger.info("Running Table of Contents Agent...");
-    const tocAgentEntries = this.normalizeTocEntries(
-      await this.agentService.extractTableOfContents(
-        ocrPages
-          .slice(2, 10)
-          .map((p) => ({ pageNumber: p.pageNumber, text: p.markdown })),
-      ),
+    const tocAgentResult = await this.agentService.extractTableOfContents(
       ocrPages
-        .map((p) => ({ pageNumber: p.pageNumber, anchorId: p.anchorId })),
+        .slice(0, 20)
+        .map((p) => ({ pageNumber: p.pageNumber, text: p.markdown })),
+    );
+    const contentPages = this.removeTocPages(ocrPages, tocAgentResult);
+    const tocAgentEntries = this.normalizeTocEntries(
+      tocAgentResult.entries,
+      contentPages.map((p) => ({ pageNumber: p.pageNumber, anchorId: p.anchorId })),
     );
 
     // 5. Normalize pages
     logger.info("Normalizing OCR text and code blocks...");
-    const normalizedPages = ocrPages.map((page) => {
+    const normalizedPages = contentPages.map((page) => {
       let cleanMarkdown = NormalizationService.stripBoundaryBlocks(
         page.markdown,
         page.headers,
@@ -323,19 +324,20 @@ export class BookProcessingService {
 
     // 6. Extract Table of Contents via AgentService
     logger.info("Running Table of Contents Agent...");
-    const tocAgentEntries = this.normalizeTocEntries(
-      await this.agentService.extractTableOfContents(
-        ocrPages
-          .slice(2, 10)
-          .map((p) => ({ pageNumber: p.pageNumber, text: p.markdown })),
-      ),
+    const tocAgentResult = await this.agentService.extractTableOfContents(
       ocrPages
-        .map((p) => ({ pageNumber: p.pageNumber, anchorId: p.anchorId })),
+        .slice(0, 20)
+        .map((p) => ({ pageNumber: p.pageNumber, text: p.markdown })),
+    );
+    const contentPages = this.removeTocPages(ocrPages, tocAgentResult);
+    const tocAgentEntries = this.normalizeTocEntries(
+      tocAgentResult.entries,
+      contentPages.map((p) => ({ pageNumber: p.pageNumber, anchorId: p.anchorId })),
     );
 
     // 7. Normalize pages, blocks, tables, images, and warnings
     logger.info("Normalizing OCR text and code blocks...");
-    const normalizedPages = ocrPages.map((page) => {
+    const normalizedPages = contentPages.map((page) => {
       // Strip headers/footers
       let cleanMarkdown = NormalizationService.stripBoundaryBlocks(
         page.markdown,
@@ -458,6 +460,26 @@ export class BookProcessingService {
       return;
     }
     CoverExtractionService.writeBase64Cover(coverImageBase64, targetCoverPath);
+  }
+
+  removeTocPages<T extends { pageNumber: number }>(
+    pages: T[],
+    tocAgentResult: Pick<TocAgentResult, "tocStartPageNumber" | "tocEndPageNumber">,
+  ): T[] {
+    const { tocStartPageNumber, tocEndPageNumber } = tocAgentResult;
+    if (
+      !tocStartPageNumber ||
+      !tocEndPageNumber ||
+      tocStartPageNumber > tocEndPageNumber
+    ) {
+      return pages;
+    }
+
+    return pages.filter(
+      (page) =>
+        page.pageNumber < tocStartPageNumber ||
+        page.pageNumber > tocEndPageNumber,
+    );
   }
 
   private normalizeTocEntries(

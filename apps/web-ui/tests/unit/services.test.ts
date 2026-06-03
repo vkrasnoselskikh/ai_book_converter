@@ -13,6 +13,7 @@ import { AuthService } from "../../src/services/authService.js";
 import { CoverExtractionService } from "../../src/services/coverExtractionService.js";
 import { EpubPackager } from "../../src/services/epubPackager.js";
 import { BookStorageService } from "../../src/services/bookStorageService.js";
+import { BookProcessingService } from "../../src/services/bookProcessingService.js";
 import { initializeDatabase } from "../../src/database/dataSource.js";
 import AdmZip from "adm-zip";
 
@@ -133,28 +134,80 @@ describe("AI Book Converter Web-UI Domain Services", () => {
       expect(meta.language).toBe("en");
     });
 
-    it("should return mock TOC under test environments", async () => {
+    it("should return mock TOC with a detected source range under test environments", async () => {
       const agentService = new AgentService();
-      const toc = await agentService.extractTableOfContents([{ pageNumber: 3, text: "Sample" }]);
-      expect(toc).toHaveLength(2);
-      expect(toc[0].title).toBe("Introduction");
-      expect(toc[0].anchorId).toBe("page-1");
+      const pages = Array.from({ length: 20 }, (_, index) => ({
+        pageNumber: index + 1,
+        text: `Sample page ${index + 1}`
+      }));
+
+      const toc = await agentService.extractTableOfContents(pages);
+
+      expect(toc.entries).toHaveLength(2);
+      expect(toc.entries[0].title).toBe("Introduction");
+      expect(toc.entries[0].anchorId).toBe("page-1");
+      expect(toc.tocStartPageNumber).toBe(2);
+      expect(toc.tocEndPageNumber).toBe(3);
     });
 
     it("should anchor TOC entries to target page numbers read from the TOC text", () => {
       const agentService = new AgentService();
-      const toc = agentService.normalizeTocAgentEntries([
-        {
-          title: "Chapter 2: Planning",
-          level: 1,
-          pageNumber: 24,
-          anchorId: "page-4"
-        }
-      ]);
+      const toc = agentService.normalizeTocAgentResult({
+        tocStartPageNumber: 3,
+        tocEndPageNumber: 4,
+        entries: [
+          {
+            title: "Chapter 2: Planning",
+            level: 1,
+            pageNumber: 24,
+            anchorId: "page-4"
+          }
+        ]
+      });
 
-      expect(toc).toHaveLength(1);
-      expect(toc[0].title).toBe("Chapter 2: Planning");
-      expect(toc[0].anchorId).toBe("page-24");
+      expect(toc.entries).toHaveLength(1);
+      expect(toc.entries[0].title).toBe("Chapter 2: Planning");
+      expect(toc.entries[0].anchorId).toBe("page-24");
+      expect(toc.tocStartPageNumber).toBe(3);
+      expect(toc.tocEndPageNumber).toBe(4);
+    });
+
+    it("should reject invalid TOC source ranges while keeping valid entries", () => {
+      const agentService = new AgentService();
+      const toc = agentService.normalizeTocAgentResult({
+        tocStartPageNumber: 8,
+        tocEndPageNumber: 4,
+        entries: [
+          {
+            title: "Chapter 1",
+            level: 1,
+            pageNumber: 12,
+            anchorId: "page-12"
+          }
+        ]
+      });
+
+      expect(toc.entries[0].anchorId).toBe("page-12");
+      expect(toc.tocStartPageNumber).toBeNull();
+      expect(toc.tocEndPageNumber).toBeNull();
+    });
+
+    it("should remove only detected TOC pages without renumbering remaining anchors", () => {
+      const bookProcessingService = new BookProcessingService();
+      const pages = [
+        { pageNumber: 1, anchorId: "page-1", markdown: "Title page" },
+        { pageNumber: 2, anchorId: "page-2", markdown: "Contents" },
+        { pageNumber: 3, anchorId: "page-3", markdown: "More contents" },
+        { pageNumber: 4, anchorId: "page-4", markdown: "Chapter 1" }
+      ];
+
+      const filteredPages = bookProcessingService.removeTocPages(pages, {
+        tocStartPageNumber: 2,
+        tocEndPageNumber: 3
+      });
+
+      expect(filteredPages.map((page) => page.pageNumber)).toEqual([1, 4]);
+      expect(filteredPages.map((page) => page.anchorId)).toEqual(["page-1", "page-4"]);
     });
   });
 
