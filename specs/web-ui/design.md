@@ -4,7 +4,6 @@
 
 The web application is located in "apps/web-ui" and consists of a React TypeScript application, a Node.js TypeScript backend, React server-side rendering, and a TypeORM storage layer using the Data Mapper pattern. The first version uses SQLite, but the schema and repository layer must be prepared for replacing the driver with Postgres without rewriting domain logic.
 
-The current Python logic from "src/ai_book_converter" is ported only where it is needed by the web application: book directory management, format validation, metadata extraction and editing, content normalization, image/table/footnote preservation, and HTML preparation for book preview. CLI behavior and Python-specific implementation details are not ported into "apps/web-ui".
 
 ## Frontend Architecture
 
@@ -251,7 +250,7 @@ Recommended book directory structure:
 ```text
 <book_id>/
   source/
-    original.epub | original.djvu
+    original.pdf | original.djvu
   metadata/
     metadata.json
   cover/
@@ -276,7 +275,7 @@ Logic from "src/ai_book_converter" is ported into TypeScript domain services:
 
 - "BookInputValidator" - validates EPUB and DJVU according to the web requirements.
 - "BookStorageService" - creates the book directory and saves artifacts.
-- "MistralOcrService" - sends the source document to Mistral OCR with the current Python live OCR behavior and adds page anchors to every recognized page.
+- "MistralOcrService" - sends the source document to Mistral OCR with the current Js live OCR behavior and adds page anchors to every recognized page.
 - "MetadataAgentService" - runs the metadata extraction agent through "@openai/agents".
 - "TableOfContentsAgentService" - runs the table-of-contents extraction agent through "@openai/agents".
 - "MetadataExtractionService" - reads or prepares metadata and cover data.
@@ -284,27 +283,12 @@ Logic from "src/ai_book_converter" is ported into TypeScript domain services:
 - "EndnoteService" - moves footer notes into readable form and preserves unmatched notes.
 - "PreviewRenderService" - prepares HTML or structured preview data for "BookReader".
 
-Portable rules from the current Python code:
-
-- processing state and diagnostic warnings from "PipelineState";
-- page structure from "PageContent";
-- image structure from "PageImage";
-- table structure from "PageTable";
-- metadata structure from "BookMetadata";
-- page anchor structure tied to original page numbers;
-- saving images from base64;
-- removing headers and footers from the main text;
-- normalizing fenced code blocks for Python-like code;
-- moving footers into endnotes;
-- replacing table and image placeholders before HTML rendering.
-
-Python CLI rules, CLI temporary directories, and final EPUB publication are not mandatory for the first web screen unless a separate task requires them.
 
 ## OCR and LLM Extraction Flow
 
 Mistral OCR flow:
 
-1. "MistralOcrService" uploads the source EPUB or DJVU-derived document to Mistral using the TypeScript implementation of the current Python live OCR behavior.
+1. "MistralOcrService" uploads the source PDF or DJVU-derived document to Mistral using the TypeScript implementation of the current JS live OCR behavior.
 2. The OCR request must include image base64 extraction, table HTML extraction, header extraction, and footer extraction where supported by the selected Mistral OCR client.
 3. The service normalizes every OCR page into an internal page object with both zero-based "pageIndex" and one-based "pageNumber".
 4. The service assigns "anchorId" to every page using the stable "page-<pageNumber>" format.

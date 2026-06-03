@@ -2,7 +2,7 @@
 
 ## Introduction
 
-The system must provide a single-page web application named "AI Book converter". When a user opens the site, they must immediately receive an anonymous session identifier and be able to upload a book in EPUB or DJVU format, view the extracted metadata and cover, edit them, and preview the book in the browser without signing in first. The system must store anonymous sessions, users, external authentication identities, books, book metadata, and book access links, and it must keep book processing files in a stable directory tied to the book identifier.
+The system must provide a single-page web application named "AI Book converter". When a user opens the site, they must immediately receive an anonymous session identifier and be able to upload a book in PDF or DJVU format, view the extracted metadata and cover, edit them, and preview the book in the browser without signing in first. The system must store anonymous sessions, users, external authentication identities, books, book metadata, and book access links, and it must keep book processing files in a stable directory tied to the book identifier.
 
 ## Glossary
 
@@ -72,7 +72,7 @@ The system must provide a single-page web application named "AI Book converter".
 
 #### Functional Tests
 
-- `apps/web-ui/tests/functional/test_book_upload.ts` - "uploads EPUB and DJVU".
+- `apps/web-ui/tests/functional/test_book_upload.ts` - "uploads PDF and DJVU".
 - `apps/web-ui/tests/functional/test_upload_validation.ts` - "rejects an unsupported format".
 - `apps/web-ui/tests/functional/test_book_processing_url.ts` - "updates the address bar to the book processing URL after upload".
 
@@ -211,7 +211,7 @@ The system must provide a single-page web application named "AI Book converter".
 8.5. WHEN the system processes footnotes, it SHALL preserve them in readable form and SHALL NOT lose unmatched footnotes.
 8.6. WHEN the system prepares HTML for preview, it SHALL preserve the content order of the source book.
 8.7. IF input or intermediate data is incomplete, the system SHALL continue processing available parts and save warnings.
-8.8. WHEN the system sends a document to Mistral OCR, it SHALL use the same OCR behavior as the current Python live OCR flow.
+8.8. WHEN the system sends a document to Mistral OCR, it SHALL use the same OCR behavior as the current JS live OCR flow.
 8.9. WHEN the system normalizes OCR page content, it SHALL separate service header and footer blocks from the main text.
 8.10. WHEN the table-of-contents agent runs, it SHALL use pages 3 through 10 of the book as input.
 8.11. WHEN the table-of-contents agent returns entries, each entry SHALL contain a title and a hyperlink target page anchor.
