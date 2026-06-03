@@ -48,6 +48,8 @@ The backend is implemented with Node.js and TypeScript. It is responsible for:
 - book file storage;
 - running domain services for book processing.
 
+The HTTP server must handle "SIGINT" and "SIGTERM" by closing the Express listener, the development "ViteDevServer" instance when present, and the initialized TypeORM data source before process exit.
+
 Recommended server modules:
 
 - "server.ts" - HTTP server startup.

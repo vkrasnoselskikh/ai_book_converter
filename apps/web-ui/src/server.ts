@@ -4,9 +4,10 @@ import cors from "cors";
 import path from "path";
 import fs from "fs";
 import multer from "multer";
+import type { Server } from "node:http";
 import { fileURLToPath, pathToFileURL } from "url";
-import { createServer as createViteServer } from "vite";
-import { initializeDatabase } from "./database/dataSource.js";
+import { createServer as createViteServer, type ViteDevServer } from "vite";
+import { AppDataSource, initializeDatabase } from "./database/dataSource.js";
 import { BookRepository } from "./database/repositories/BookRepository.js";
 import { Book } from "./database/entities/Book.js";
 import { AuthService } from "./services/authService.js";
@@ -536,7 +537,7 @@ app.get("/api/books/:bookId/download", async (req: any, res) => {
 const port = process.env.PORT || 8000;
 
 // Setup HMR dev server or Production serve
-let vite: any;
+let vite: ViteDevServer | null = null;
 if (process.env.NODE_ENV !== "production") {
   vite = await createViteServer({
     server: { middlewareMode: true },
@@ -557,6 +558,9 @@ app.get("*", async (req: any, res) => {
     let renderFn: any;
 
     if (process.env.NODE_ENV !== "production") {
+      if (!vite) {
+        throw new Error("Vite development server is not initialized");
+      }
       template = fs.readFileSync(
         fileURLToPath(new URL("../index.html", import.meta.url)),
         "utf-8",
@@ -630,8 +634,55 @@ app.get("*", async (req: any, res) => {
   }
 });
 
-app.listen(port, () => {
+const httpServer: Server = app.listen(port, () => {
   logger.info(
     `Server is running at http://localhost:${port} in ${process.env.NODE_ENV || "development"} mode`,
   );
 });
+
+let isShuttingDown = false;
+
+const closeHttpServer = async (): Promise<void> => {
+  httpServer.closeIdleConnections?.();
+  await new Promise((resolve, reject) => {
+    httpServer.close((err) => {
+      if (err) {
+        reject(err);
+        return;
+      }
+      resolve(undefined);
+    });
+  });
+};
+
+const shutdown = async (signal: NodeJS.Signals): Promise<void> => {
+  if (isShuttingDown) {
+    return;
+  }
+  isShuttingDown = true;
+  logger.info(`Received ${signal}; shutting down server...`);
+
+  const forceExitTimer = setTimeout(() => {
+    logger.error("Graceful shutdown timed out; forcing process exit");
+    process.exit(1);
+  }, 10_000);
+  forceExitTimer.unref();
+
+  try {
+    await closeHttpServer();
+    if (vite) {
+      await vite.close();
+    }
+    if (AppDataSource.isInitialized) {
+      await AppDataSource.destroy();
+    }
+    logger.info("Server stopped");
+    process.exit(0);
+  } catch (err) {
+    logger.error("Server shutdown failed:", err);
+    process.exit(1);
+  }
+};
+
+process.once("SIGINT", shutdown);
+process.once("SIGTERM", shutdown);
