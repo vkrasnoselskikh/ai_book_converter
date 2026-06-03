@@ -17,6 +17,7 @@ import { BookProcessingService } from "./services/bookProcessingService.js";
 import { EpubPackager } from "./services/epubPackager.js";
 import { PreviewRenderService } from "./services/previewRenderService.js";
 import { getLogger } from "./utils/logger.js";
+import { normalizeUploadedFileName } from "./utils/fileNameEncoding.js";
 
 const logger = getLogger("server");
 
@@ -165,8 +166,9 @@ app.post("/api/books", upload.single("book"), async (req: any, res) => {
   }
 
   const { originalname, path: tempPath } = req.file;
-  const suffix = originalname
-    .substring(originalname.lastIndexOf("."))
+  const originalFileName = normalizeUploadedFileName(originalname);
+  const suffix = originalFileName
+    .substring(originalFileName.lastIndexOf("."))
     .toLowerCase();
 
   if (suffix !== ".epub" && suffix !== ".djvu" && suffix !== ".pdf") {
@@ -188,7 +190,7 @@ app.post("/api/books", upload.single("book"), async (req: any, res) => {
     }
 
     // Create Book DB Record
-    const book = await bookRepo.create(originalname, sourceFormat, "");
+    const book = await bookRepo.create(originalFileName, sourceFormat, "");
 
     // Secure books directories
     const targetFileName = `original${suffix}`;
@@ -508,7 +510,7 @@ app.get("/api/books/:bookId/download", async (req: any, res) => {
       toc: book.metadata?.toc,
     };
 
-    const epubBuffer = EpubPackager.createEpub(
+    const epubBuffer = await EpubPackager.createEpub(
       bookId,
       packagerMetadata,
       pages,

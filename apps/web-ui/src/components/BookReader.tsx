@@ -39,7 +39,7 @@ export const BookReader: React.FC<BookReaderProps> = ({
   endnotes = [],
   tocEntries = [],
   title,
-  authors
+  authors,
 }) => {
   const [tocCollapsed, setTocCollapsed] = useState(false);
 
@@ -110,7 +110,9 @@ export const BookReader: React.FC<BookReaderProps> = ({
       );
     },
     strong({ children }) {
-      return <strong className="font-bold text-base-content">{children}</strong>;
+      return (
+        <strong className="font-bold text-base-content">{children}</strong>
+      );
     },
     em({ children }) {
       return <em className="text-base-content/80">{children}</em>;
@@ -123,10 +125,16 @@ export const BookReader: React.FC<BookReaderProps> = ({
       );
     },
     ul({ children }) {
-      return <ul className="mb-6 ml-6 list-disc space-y-2 leading-8">{children}</ul>;
+      return (
+        <ul className="mb-6 ml-6 list-disc space-y-2 leading-8">{children}</ul>
+      );
     },
     ol({ children }) {
-      return <ol className="mb-6 ml-6 list-decimal space-y-2 leading-8">{children}</ol>;
+      return (
+        <ol className="mb-6 ml-6 list-decimal space-y-2 leading-8">
+          {children}
+        </ol>
+      );
     },
     li({ children }) {
       return <li className="pl-2 text-base-content/90">{children}</li>;
@@ -153,8 +161,8 @@ export const BookReader: React.FC<BookReaderProps> = ({
     },
     pre({ children }) {
       return (
-        <div className="mockup-code my-7 overflow-x-auto rounded-md bg-neutral text-neutral-content shadow-sm">
-          <pre className="px-5 py-4 text-sm leading-7">{children}</pre>
+        <div className="mockup-code my-7 w-full">
+          <pre>{children}</pre>
         </div>
       );
     },
@@ -163,7 +171,7 @@ export const BookReader: React.FC<BookReaderProps> = ({
       const isBlock = isLanguageBlock || String(children).includes("\n");
       if (isBlock) {
         return (
-          <code className={`${className || ""} font-mono text-sm`}>
+          <code className={`${className || ""} font-mono text-sm inline-block`}>
             {children}
           </code>
         );
@@ -185,7 +193,9 @@ export const BookReader: React.FC<BookReaderProps> = ({
       );
     },
     thead({ children }) {
-      return <thead className="bg-base-200 text-base-content">{children}</thead>;
+      return (
+        <thead className="bg-base-200 text-base-content">{children}</thead>
+      );
     },
     tbody({ children }) {
       return <tbody>{children}</tbody>;
@@ -206,9 +216,7 @@ export const BookReader: React.FC<BookReaderProps> = ({
     },
     td({ children }) {
       return (
-        <td className="px-4 py-3 align-top text-base-content/85">
-          {children}
-        </td>
+        <td className="px-4 py-3 align-top text-base-content/85">{children}</td>
       );
     },
   };
@@ -216,12 +224,16 @@ export const BookReader: React.FC<BookReaderProps> = ({
   return (
     <div className="flex h-[calc(100vh-65px)] overflow-hidden bg-base-100">
       {/* 1. Left Table of Contents Sidebar */}
-      <aside className={`transition-all duration-300 border-r border-base-content/10 bg-base-200/40 backdrop-blur-md flex flex-col ${
-        tocCollapsed ? "w-0 opacity-0 overflow-hidden" : "w-80 opacity-100"
-      }`}>
+      <aside
+        className={`transition-all duration-300 border-r border-base-content/10 bg-base-200/40 backdrop-blur-md flex flex-col ${
+          tocCollapsed ? "w-0 opacity-0 overflow-hidden" : "w-80 opacity-100"
+        }`}
+      >
         <div className="p-4 border-b border-base-content/10 flex items-center justify-between">
-          <span className="font-heading font-bold text-base uppercase tracking-wider text-base-content/60">Table of Contents</span>
-          <button 
+          <span className="font-heading font-bold text-base uppercase tracking-wider text-base-content/60">
+            Table of Contents
+          </span>
+          <button
             onClick={() => setTocCollapsed(true)}
             className="btn btn-ghost btn-xs btn-circle"
             aria-label="Collapse TOC"
@@ -233,7 +245,10 @@ export const BookReader: React.FC<BookReaderProps> = ({
           {tocEntries.length > 0 ? (
             <ul className="menu menu-xs w-full p-0 gap-1">
               {tocEntries.map((entry, idx) => (
-                <li key={idx} style={{ paddingLeft: `${(entry.level - 1) * 12}px` }}>
+                <li
+                  key={idx}
+                  style={{ paddingLeft: `${(entry.level - 1) * 12}px` }}
+                >
                   <a
                     href={`#${entry.anchorId}`}
                     onClick={(event) => {
@@ -257,13 +272,24 @@ export const BookReader: React.FC<BookReaderProps> = ({
 
       {/* Toggle button when collapsed */}
       {tocCollapsed && (
-        <button 
+        <button
           onClick={() => setTocCollapsed(false)}
           className="fixed left-4 bottom-4 z-40 btn btn-circle btn-primary text-primary-content shadow-lg shadow-primary/20 animate-bounce"
           title="Open Table of Contents"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            className="h-6 w-6"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2}
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M4 6h16M4 12h16M4 18h16"
+            />
           </svg>
         </button>
       )}
@@ -311,7 +337,9 @@ export const BookReader: React.FC<BookReaderProps> = ({
                           key={endnote.noteId}
                           className="pl-2 leading-7 text-base-content/85"
                         >
-                          {endnote.marker !== null ? `[${endnote.marker}] ` : ""}
+                          {endnote.marker !== null
+                            ? `[${endnote.marker}] `
+                            : ""}
                           {endnote.text}
                           {endnote.linked && (
                             <>

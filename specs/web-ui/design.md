@@ -283,7 +283,8 @@ Logic from "src/ai_book_converter" is ported into TypeScript domain services:
 - "MetadataExtractionService" - reads or prepares metadata and cover data.
 - "ContentNormalizationService" - normalizes pages, blocks, tables, images, and warnings.
 - "EndnoteService" - moves footer notes into readable form and preserves unmatched notes.
-- "PreviewRenderService" - prepares structured markdown preview data for "BookReader" and keeps legacy HTML compilation for EPUB packaging and fallback preview rendering.
+- "PreviewRenderService" - prepares structured markdown preview data for "BookReader" and keeps legacy HTML compilation only for fallback preview rendering.
+- "EpubMarkdownRenderService" - renders OCR markdown to server-side EPUB body XHTML with "MarkdownAsync", "remark-gfm", and "rehype-raw" so lists, tables, code blocks, blockquotes, links, images, and inline formatting are preserved.
 
 
 ## OCR and LLM Extraction Flow
@@ -336,6 +337,7 @@ Table-of-contents agent flow:
 10. "BookPreviewService" renders the table of contents as hyperlinks to page anchors.
 11. "BookProcessingService" validates table-of-contents anchors against the remaining recognized one-based page anchors and falls back to the nearest available page anchor when needed.
 12. EPUB download navigation maps "page-1" to the first generated OCR XHTML page, preserving the one-based preview anchor contract.
+13. "EpubPackager" renders OCR markdown pages asynchronously through "EpubMarkdownRenderService" before writing generated XHTML files and does not use the legacy regex markdown compiler for EPUB output.
 
 The table-of-contents extraction result has this shape:
 
@@ -380,7 +382,7 @@ SSR must not require a selected book. The first screen must remain available eve
 Book URL flow:
 
 1. The user uploads a supported book through "POST /api/books".
-2. The backend creates the "Book" record, creates the current access link, starts or schedules processing, and returns "bookUrl".
+2. The backend normalizes the multipart upload file name when UTF-8 bytes were decoded as Latin-1, then creates the "Book" record with the readable "originalFileName", creates the current access link, starts or schedules processing, and returns "bookUrl".
 3. The client updates browser history to "bookUrl" immediately after upload success.
 4. If the user leaves the tab before processing completes, processing continues independently from the browser tab lifecycle.
 5. When the user later opens "GET /books/:bookId", the backend resolves the current anonymous session or authenticated user and verifies access through "SessionBook" or "UserBook".
@@ -416,6 +418,7 @@ Each error must have:
 
 - `apps/web-ui/tests/unit/test_book_input_validator.ts` - verifies EPUB/DJVU support and rejection of other formats.
 - `apps/web-ui/tests/unit/test_book_storage_service.ts` - verifies `AI_BOOK_COVERTER_BOOKS_PATH/<book_id>` and file saving.
+- `apps/web-ui/tests/unit/services.test.ts` - verifies uploaded file name normalization for UTF-8 names decoded as Latin-1.
 - `apps/web-ui/tests/unit/test_entities.ts` - verifies UUIDs, sessions, identities, links, and entity constraints.
 - `apps/web-ui/tests/unit/test_session_service.ts` - verifies anonymous session creation and reuse.
 - `apps/web-ui/tests/unit/test_auth_service.ts` - verifies external identity lookup and user creation.
@@ -428,10 +431,11 @@ Each error must have:
 - `apps/web-ui/tests/unit/test_content_normalization_service.ts` - verifies portable normalization rules.
 - `apps/web-ui/tests/unit/test_endnote_service.ts` - verifies footnotes and unmatched footnotes.
 - `apps/web-ui/tests/unit/test_preview_render_service.ts` - verifies structured markdown preview preparation and legacy HTML preview.
-- `apps/web-ui/tests/unit/services.test.ts` - verifies TOC anchor normalization by target page numbers read from the table-of-contents text.
+- `apps/web-ui/tests/unit/services.test.ts` - verifies TOC anchor normalization by target page numbers read from the table-of-contents text and EPUB markdown rendering for generated XHTML pages.
 - `apps/web-ui/tests/unit/test_ssr.tsx` - verifies first-screen server-side rendering.
 - `apps/web-ui/tests/unit/test_book_url_builder.ts` - verifies canonical book processing URLs.
 - `apps/web-ui/tests/unit/test_header_state.tsx` - verifies header state for empty and selected books.
+- `apps/web-ui/tests/unit/theme_css_config.test.ts` - verifies daisyUI is configured with the supported "emerald" and "forest" themes.
 
 ### Functional Tests
 
@@ -463,8 +467,8 @@ Each error must have:
 
 | Requirement | Unit Tests | Functional Tests |
 |-------------|------------|-------------------|
-| web-ui.1 | `apps/web-ui/tests/unit/test_ssr.tsx`, `apps/web-ui/tests/unit/test_session_service.ts`, `apps/web-ui/tests/unit/test_header_state.tsx` | `apps/web-ui/tests/functional/test_home_page.ts`, `apps/web-ui/tests/functional/test_header_layout.ts`, `apps/web-ui/tests/functional/test_theme_modes.ts`, `apps/web-ui/tests/functional/test_anonymous_session.ts` |
-| web-ui.2 | `apps/web-ui/tests/unit/test_book_input_validator.ts`, `apps/web-ui/tests/unit/test_book_url_builder.ts` | `apps/web-ui/tests/functional/test_book_upload.ts`, `apps/web-ui/tests/functional/test_upload_validation.ts`, `apps/web-ui/tests/functional/test_book_processing_url.ts` |
+| web-ui.1 | `apps/web-ui/tests/unit/test_ssr.tsx`, `apps/web-ui/tests/unit/test_session_service.ts`, `apps/web-ui/tests/unit/test_header_state.tsx`, `apps/web-ui/tests/unit/theme_css_config.test.ts` | `apps/web-ui/tests/functional/test_home_page.ts`, `apps/web-ui/tests/functional/test_header_layout.ts`, `apps/web-ui/tests/functional/test_theme_modes.ts`, `apps/web-ui/tests/functional/test_anonymous_session.ts` |
+| web-ui.2 | `apps/web-ui/tests/unit/test_book_input_validator.ts`, `apps/web-ui/tests/unit/test_book_url_builder.ts`, `apps/web-ui/tests/unit/services.test.ts` | `apps/web-ui/tests/functional/test_book_upload.ts`, `apps/web-ui/tests/functional/test_upload_validation.ts`, `apps/web-ui/tests/functional/test_book_processing_url.ts` |
 | web-ui.3 | `apps/web-ui/tests/unit/test_metadata_service.ts`, `apps/web-ui/tests/unit/test_metadata_agent_service.ts`, `apps/web-ui/tests/unit/test_cover_service.ts`, `apps/web-ui/tests/unit/services.test.ts` | `apps/web-ui/tests/functional/test_book_metadata.ts`, `apps/web-ui/tests/functional/test_metadata_agent.ts`, `apps/web-ui/tests/functional/test_cover_editing.ts` |
 | web-ui.4 | `apps/web-ui/tests/unit/test_preview_render_service.ts`, `apps/web-ui/tests/unit/test_endnote_service.ts`, `apps/web-ui/tests/unit/test_table_of_contents_agent_service.ts`, `apps/web-ui/tests/unit/services.test.ts` | `apps/web-ui/tests/functional/test_book_reader.ts`, `apps/web-ui/tests/functional/test_book_processing_state.ts`, `apps/web-ui/tests/functional/test_table_of_contents.ts`, `apps/web-ui/tests/functional/test_book_processing_resume.ts` |
 | web-ui.5 | `apps/web-ui/tests/unit/test_entities.ts`, `apps/web-ui/tests/unit/test_session_service.ts` | `apps/web-ui/tests/functional/test_anonymous_books.ts`, `apps/web-ui/tests/functional/test_user_books.ts`, `apps/web-ui/tests/functional/test_shared_books.ts` |

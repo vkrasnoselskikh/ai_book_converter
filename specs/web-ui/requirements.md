@@ -69,10 +69,12 @@ The system must provide a single-page web application named "AI Book converter".
 2.7. IF file processing fails, the system SHALL save a diagnostic book status and show a clear message to the user.
 2.8. WHEN the book is created after upload, the system SHALL update the browser address bar to the canonical processing URL for this book.
 2.9. WHEN the browser address bar is updated to the book processing URL, the system SHALL NOT require book processing to be completed.
+2.10. WHEN the uploaded book file name contains non-ASCII characters, the system SHALL preserve the readable file name in the current book label and book history.
 
 #### Functional Tests
 
 - `apps/web-ui/tests/functional/test_book_upload.ts` - "uploads PDF and DJVU".
+- `apps/web-ui/tests/functional/test_book_upload.ts` - "preserves non-ASCII uploaded file names".
 - `apps/web-ui/tests/functional/test_upload_validation.ts` - "rejects an unsupported format".
 - `apps/web-ui/tests/functional/test_book_processing_url.ts` - "updates the address bar to the book processing URL after upload".
 
@@ -224,6 +226,7 @@ The system must provide a single-page web application named "AI Book converter".
 8.16. WHEN the table-of-contents agent runs, it SHALL identify the source page range where the printed table of contents starts and ends when such a range is present.
 8.17. WHEN OCR-derived final preview and book artifacts are prepared, the system SHALL exclude pages classified as table-of-contents pages.
 8.17.1. IF the table-of-contents agent does not return a valid table-of-contents page range, the system SHALL keep OCR pages in the final preview and book artifacts.
+8.18. WHEN OCR-derived EPUB artifacts are generated from markdown content, the system SHALL preserve readable lists, tables, code blocks, blockquotes, links, images, and inline formatting.
 
 #### Functional Tests
 

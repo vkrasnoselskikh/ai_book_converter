@@ -15,6 +15,7 @@ import { EpubPackager } from "../../src/services/epubPackager.js";
 import { BookStorageService } from "../../src/services/bookStorageService.js";
 import { BookProcessingService } from "../../src/services/bookProcessingService.js";
 import { initializeDatabase } from "../../src/database/dataSource.js";
+import { normalizeUploadedFileName } from "../../src/utils/fileNameEncoding.js";
 import AdmZip from "adm-zip";
 
 describe("AI Book Converter Web-UI Domain Services", () => {
@@ -463,10 +464,29 @@ describe("AI Book Converter Web-UI Domain Services", () => {
     });
   });
 
-  // 10. EPUB Packager Tests
+  // 10. Uploaded Filename Encoding Tests
+  describe("normalizeUploadedFileName", () => {
+    it("should restore UTF-8 filenames decoded as latin1 by multipart parsing", () => {
+      const mojibakeName =
+        "\u00d0\u009f\u00d0\u00b0\u00d1\u0082\u00d1\u0082\u00d0\u00b5\u00d1\u0080\u00d0\u00bd\u00d1\u008b.pdf";
+
+      expect(normalizeUploadedFileName(mojibakeName)).toBe(
+        "\u041f\u0430\u0442\u0442\u0435\u0440\u043d\u044b.pdf",
+      );
+    });
+
+    it("should preserve already valid uploaded filenames", () => {
+      expect(normalizeUploadedFileName("Resume.epub")).toBe("Resume.epub");
+      expect(normalizeUploadedFileName("R\u00e9sum\u00e9.epub")).toBe(
+        "R\u00e9sum\u00e9.epub",
+      );
+    });
+  });
+
+  // 11. EPUB Packager Tests
   describe("EpubPackager", () => {
-    it("should map one-based TOC page anchors to zero-based generated XHTML files", () => {
-      const epubBuffer = EpubPackager.createEpub(
+    it("should map one-based TOC page anchors to zero-based generated XHTML files", async () => {
+      const epubBuffer = await EpubPackager.createEpub(
         "book-id",
         {
           title: "Test Book",
@@ -490,9 +510,81 @@ describe("AI Book Converter Web-UI Domain Services", () => {
       expect(tocNcx).toContain('<content src="xhtml/page-0.xhtml"/>');
       expect(tocNcx).not.toContain('<content src="xhtml/page-1.xhtml"/>');
     });
+
+    it("should render OCR markdown with GFM structures into EPUB XHTML", async () => {
+      const epubBuffer = await EpubPackager.createEpub(
+        "book-id",
+        {
+          title: "Markdown Book",
+          authors: ["Author"],
+          language: "en",
+          isbnNumbers: []
+        },
+        [
+          {
+            pageIndex: 0,
+            markdown: [
+              "# Chapter",
+              "",
+              "- First item",
+              "  continued text",
+              "- Second item",
+              "",
+              "1. Ordered",
+              "2. Another",
+              "",
+              "| Name | Value |",
+              "| --- | --- |",
+              "| Item | 42 |",
+              "",
+              "```ts",
+              "const value = 1;",
+              "```",
+              "",
+              "> Quote text",
+              "",
+              "![img-1](img-1)",
+              "",
+              "[tbl-1](tbl-1)"
+            ].join("\n"),
+            images: [
+              {
+                id: "img-1",
+                fileName: "sample.png",
+                imageBase64: "data:image/png;base64,iVBORw0KGgo=",
+                width: 100,
+                height: 100
+              }
+            ],
+            tables: [
+              {
+                id: "tbl-1",
+                contentHtml: "<table><tr><td>Raw Cell</td></tr></table>"
+              }
+            ]
+          }
+        ],
+        [{ fileName: "sample.png", buffer: Buffer.from("image") }],
+        null
+      );
+
+      const zip = new AdmZip(epubBuffer);
+      const pageXhtml = zip.readAsText("OEBPS/xhtml/page-0.xhtml");
+
+      expect(pageXhtml).toContain("<h1>Chapter</h1>");
+      expect(pageXhtml).toContain("<ul>");
+      expect(pageXhtml).toContain("<ol>");
+      expect(pageXhtml).toContain("<table>");
+      expect(pageXhtml).toContain("<th>Name</th>");
+      expect(pageXhtml).toContain("<td>Raw Cell</td>");
+      expect(pageXhtml).toContain("<blockquote>");
+      expect(pageXhtml).toContain('class="language-ts"');
+      expect(pageXhtml).toContain('src="../images/sample.png"');
+      expect(pageXhtml).not.toContain('rel="preload"');
+    });
   });
 
-  // 11. Auth Service Tests
+  // 12. Auth Service Tests
   describe("AuthService", () => {
     it("should sign and verify JWT tokens cleanly", async () => {
       const auth = new AuthService();

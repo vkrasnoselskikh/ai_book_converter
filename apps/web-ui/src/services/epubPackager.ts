@@ -1,12 +1,13 @@
 import AdmZip from "adm-zip";
 import path from "path";
+import { EpubMarkdownRenderService } from "./epubMarkdownRenderService.js";
 import { PreviewRenderService } from "./previewRenderService.js";
 
 export class EpubPackager {
   /**
    * Generates a fully compliant, well-formed EPUB e-book archive from book preview artifacts.
    */
-  static createEpub(
+  static async createEpub(
     bookId: string,
     metadata: {
       title: string;
@@ -19,7 +20,7 @@ export class EpubPackager {
     pages: any[],
     imagesList: Array<{ fileName: string; buffer: Buffer }>,
     coverBuffer: Buffer | null
-  ): Buffer {
+  ): Promise<Buffer> {
     const zip = new AdmZip();
 
     // 1. mimetype (MUST be first entry and stored uncompressed)
@@ -144,7 +145,7 @@ li {
     }
 
     // Process and append body content pages
-    pages.forEach((page, idx) => {
+    for (const [idx, page] of pages.entries()) {
       const pageId = `page-${idx}`;
       const pageFileName = `page-${idx}.xhtml`;
 
@@ -156,8 +157,7 @@ li {
         // Markdown (DJVU/PDF OCR source)
         let pageMarkdown = PreviewRenderService.replaceTablePlaceholders(page.markdown, page.tables || []);
         pageMarkdown = PreviewRenderService.replaceImagePlaceholders(pageMarkdown, page.images || [], "../images");
-        bodyContent = PreviewRenderService.compileMarkdown(pageMarkdown);
-        bodyContent = PreviewRenderService.normalizeImageSources(bodyContent, "../images");
+        bodyContent = await EpubMarkdownRenderService.renderMarkdownBody(pageMarkdown);
       } else {
         bodyContent = `<p>No content on this page.</p>`;
       }
@@ -177,7 +177,7 @@ li {
       zip.addFile(`OEBPS/xhtml/${pageFileName}`, Buffer.from(pageXml, "utf-8"));
       manifestItems.push(`<item id="${pageId}" href="xhtml/${pageFileName}" media-type="application/xhtml+xml"/>`);
       spineRefList.push(pageId);
-    });
+    }
 
     // 5. Generate content.opf
     const authorsXml = metadata.authors.map(a => `<dc:creator>${a}</dc:creator>`).join("\n");
