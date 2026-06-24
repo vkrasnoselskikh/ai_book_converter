@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { useTheme } from "./ThemeContext.jsx";
+import { useTheme } from "./ThemeContext.js";
 
 interface HeaderBarProps {
   displayName: string | null;

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
-import { AppShell } from "./AppShell.jsx";
-import { BookUploadPanel } from "./BookUploadPanel.jsx";
-import { BookReader } from "./BookReader.jsx";
+import { AppShell } from "./AppShell.js";
+import { BookUploadPanel } from "./BookUploadPanel.js";
+import { BookReader } from "./BookReader.js";
 
 interface Book {
   id: string;

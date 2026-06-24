@@ -50,6 +50,14 @@ The backend is implemented with Node.js and TypeScript. It is responsible for:
 
 The HTTP server must handle "SIGINT" and "SIGTERM" by closing the Express listener, the development "ViteDevServer" instance when present, and the initialized TypeORM data source before process exit.
 
+## Container Deployment
+
+The repository root "Dockerfile" must build the "apps/web-ui" application with a multi-stage image based on "node:26-bookworm-slim". The build stage installs package dependencies with "npm ci", compiles the Vite client and TypeScript server with "npm run build", and prunes development dependencies before the runtime stage.
+
+The runtime stage must run the compiled server with "node dist/server.js" as the non-root "node" user. It must expose port "8000" and define persistent storage under "/app/data", with "DATABASE_PATH" pointing to "/app/data/db.sqlite" and "AI_BOOK_COVERTER_BOOKS_PATH" pointing to "/app/data/books".
+
+The repository root ".dockerignore" must exclude local dependencies, build artifacts, SQLite databases, uploads, and local environment files from the Docker build context.
+
 Recommended server modules:
 
 - "server.ts" - HTTP server startup.
@@ -380,6 +388,7 @@ DJVU must be supported as a web application input format. Because the current Py
 5. Subsequent actions run through the API without navigating to other pages.
 
 SSR must not require a selected book. The first screen must remain available even when the database fails, if a diagnostic state can be returned.
+Local TSX imports that can be reached by production SSR must use ".js" module specifiers, because the NodeNext server build emits compiled component modules as ".js" files under "dist".
 
 Book URL flow:
 
@@ -435,6 +444,7 @@ Each error must have:
 - `apps/web-ui/tests/unit/test_preview_render_service.ts` - verifies structured markdown preview preparation and legacy HTML preview.
 - `apps/web-ui/tests/unit/services.test.ts` - verifies TOC anchor normalization by target page numbers read from the table-of-contents text and EPUB markdown rendering for generated XHTML pages.
 - `apps/web-ui/tests/unit/test_ssr.tsx` - verifies first-screen server-side rendering.
+- `apps/web-ui/tests/unit/ssr_build_imports.test.ts` - verifies production SSR-reachable TSX imports use compiled ".js" module specifiers.
 - `apps/web-ui/tests/unit/test_book_url_builder.ts` - verifies canonical book processing URLs.
 - `apps/web-ui/tests/unit/test_header_state.tsx` - verifies header state for empty and selected books.
 - `apps/web-ui/tests/unit/theme_css_config.test.ts` - verifies daisyUI is configured with the supported "emerald" and "forest" themes.
@@ -475,6 +485,6 @@ Each error must have:
 | web-ui.4 | `apps/web-ui/tests/unit/test_preview_render_service.ts`, `apps/web-ui/tests/unit/test_endnote_service.ts`, `apps/web-ui/tests/unit/test_table_of_contents_agent_service.ts`, `apps/web-ui/tests/unit/services.test.ts` | `apps/web-ui/tests/functional/test_book_reader.ts`, `apps/web-ui/tests/functional/test_book_processing_state.ts`, `apps/web-ui/tests/functional/test_table_of_contents.ts`, `apps/web-ui/tests/functional/test_book_processing_resume.ts` |
 | web-ui.5 | `apps/web-ui/tests/unit/test_entities.ts`, `apps/web-ui/tests/unit/test_session_service.ts` | `apps/web-ui/tests/functional/test_anonymous_books.ts`, `apps/web-ui/tests/functional/test_user_books.ts`, `apps/web-ui/tests/functional/test_shared_books.ts` |
 | web-ui.6 | `apps/web-ui/tests/unit/test_book_storage_service.ts` | `apps/web-ui/tests/functional/test_book_file_storage.ts`, `apps/web-ui/tests/functional/test_book_storage_error.ts` |
-| web-ui.7 | `apps/web-ui/tests/unit/test_ssr.tsx`, `apps/web-ui/tests/unit/test_book_url_builder.ts` | `apps/web-ui/tests/functional/test_ssr_rendering.ts`, `apps/web-ui/tests/functional/test_client_hydration.ts`, `apps/web-ui/tests/functional/test_book_url_ssr.ts` |
+| web-ui.7 | `apps/web-ui/tests/unit/test_ssr.tsx`, `apps/web-ui/tests/unit/ssr_build_imports.test.ts`, `apps/web-ui/tests/unit/test_book_url_builder.ts` | `apps/web-ui/tests/functional/test_ssr_rendering.ts`, `apps/web-ui/tests/functional/test_client_hydration.ts`, `apps/web-ui/tests/functional/test_book_url_ssr.ts` |
 | web-ui.8 | `apps/web-ui/tests/unit/test_mistral_ocr_service.ts`, `apps/web-ui/tests/unit/test_content_normalization_service.ts`, `apps/web-ui/tests/unit/test_endnote_service.ts`, `apps/web-ui/tests/unit/test_preview_render_service.ts`, `apps/web-ui/tests/unit/test_table_of_contents_agent_service.ts`, `apps/web-ui/tests/unit/services.test.ts` | `apps/web-ui/tests/functional/test_converter_port.ts`, `apps/web-ui/tests/functional/test_partial_book_data.ts`, `apps/web-ui/tests/functional/test_ocr_page_anchors.ts`, `apps/web-ui/tests/functional/test_toc_agent.ts` |
 | web-ui.9 | `apps/web-ui/tests/unit/test_auth_service.ts`, `apps/web-ui/tests/unit/test_account_linking_service.ts` | `apps/web-ui/tests/functional/test_auth_providers.ts`, `apps/web-ui/tests/functional/test_session_account_linking.ts`, `apps/web-ui/tests/functional/test_authenticated_history.ts` |

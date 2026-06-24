@@ -1,5 +1,5 @@
 import React from "react";
-import { HeaderBar } from "./HeaderBar.jsx";
+import { HeaderBar } from "./HeaderBar.js";
 
 interface AppShellProps {
   children: React.ReactNode;
